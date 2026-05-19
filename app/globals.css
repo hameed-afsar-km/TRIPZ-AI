@@ -10,23 +10,23 @@
   --font-kenyan: "Kenyan Coffee", sans-serif;
   --color-brand-orange: #ea580c;
   --color-brand-amber: #f59e0b;
-  --animate-shooting-star: shooting-star 14s linear infinite;
+  --animate-premium-shooting-star: premium-shooting-star 6s linear infinite;
 
-  @keyframes shooting-star {
+  @keyframes premium-shooting-star {
     0% {
-      transform: translate3d(-10vw, 0, 0) rotate(-12deg) scale(0);
+      transform: translate3d(0, 0, 0) rotate(162deg) scale(0);
       opacity: 0;
     }
     10% {
-      opacity: 0.9;
-      transform: translate3d(25vw, 3vh, 0) rotate(-12deg) scale(1);
+      transform: translate3d(-15vw, 5vh, 0) rotate(162deg) scale(var(--star-scale, 1));
+      opacity: var(--star-opacity, 1);
     }
-    20% {
+    30% {
+      transform: translate3d(-60vw, 20vh, 0) rotate(162deg) scale(0.1);
       opacity: 0;
-      transform: translate3d(90vw, 12vh, 0) rotate(-12deg) scale(0.2);
     }
     100% {
-      transform: translate3d(90vw, 12vh, 0) rotate(-12deg) scale(0);
+      transform: translate3d(-60vw, 20vh, 0) rotate(162deg) scale(0);
       opacity: 0;
     }
   }
@@ -43,12 +43,12 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   text-shadow: 
-    1px 1px 0px #c2410c, 
-    2px 2px 0px #c2410c, 
-    3px 3px 0px #9a3412, 
-    4px 4px 0px #9a3412, 
-    5px 5px 0px #7c2d12, 
-    6px 6px 0px #7c2d12, 
-    7px 7px 15px rgba(0, 0, 0, 0.95);
+    -3px 0px 0px rgba(255, 255, 255, 0.4), 
+    3px 0px 0px rgba(194, 65, 12, 0.8), 
+    -8px 0px 4px rgba(234, 88, 12, 0.6), 
+    8px 0px 4px rgba(154, 52, 18, 0.6), 
+    -15px 0px 10px rgba(234, 88, 12, 0.2), 
+    15px 0px 10px rgba(154, 52, 18, 0.2), 
+    0px 0px 20px rgba(234, 88, 12, 0.8);
 }
 

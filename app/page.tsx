@@ -1,17 +1,19 @@
 "use client";
 
 import React, { useState } from "react";
+import { motion } from "framer-motion";
 import { PromptInputBox } from "@/components/ui/ai-prompt-box";
-import { 
-  Compass, 
-  Sparkles, 
-  MapPin, 
-  DollarSign, 
-  Plane, 
-  Activity, 
-  Hotel, 
-  Train, 
-  Clock, 
+import ShootingStarsOverlay from "@/components/ui/shooting-stars-overlay";
+import {
+  Compass,
+  Sparkles,
+  MapPin,
+  DollarSign,
+  Plane,
+  Activity,
+  Hotel,
+  Train,
+  Clock,
   ArrowRight
 } from "lucide-react";
 
@@ -52,7 +54,7 @@ export default function Home() {
     ]);
     await sleep(2000);
 
-    setSimulationLogs(prev => 
+    setSimulationLogs(prev =>
       prev.map(log => log.id === "1" ? { ...log, status: "completed", text: "Established core 5-day route and baseline locations." } : log)
     );
 
@@ -70,7 +72,7 @@ export default function Home() {
     ]);
     await sleep(2000);
 
-    setSimulationLogs(prev => 
+    setSimulationLogs(prev =>
       prev.map(log => log.id === "2" ? { ...log, status: "completed", text: "Found stays under budget. Applied 15% partner loyalty discount." } : log)
     );
 
@@ -88,7 +90,7 @@ export default function Home() {
     ]);
     await sleep(2000);
 
-    setSimulationLogs(prev => 
+    setSimulationLogs(prev =>
       prev.map(log => log.id === "3" ? { ...log, status: "completed", text: "Built step-by-step train schedules and local transfer connections." } : log)
     );
 
@@ -106,7 +108,7 @@ export default function Home() {
     ]);
     await sleep(2000);
 
-    setSimulationLogs(prev => 
+    setSimulationLogs(prev =>
       prev.map(log => log.id === "4" ? { ...log, status: "completed", text: "Added curated local dining spots and reservation recommendations." } : log)
     );
 
@@ -124,25 +126,28 @@ export default function Home() {
 
   return (
     <div className="h-screen bg-[url('/bg.jpeg')] bg-cover bg-center bg-no-repeat text-[#f4f4f5] font-sans selection:bg-orange-500/30 selection:text-orange-400 relative overflow-hidden flex flex-col justify-between p-4 md:p-6">
-      
+
       {/* Dark frosted glass overlay for readability & image colors blending */}
       <div className="absolute inset-0 bg-[#09090b]/85 backdrop-blur-[3px] -z-10"></div>
 
       {/* Background glow effects matching orange theme */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[140px] pointer-events-none -z-10 animate-pulse duration-[8000ms]"></div>
 
-      {/* Animated Shooting Star at the top, flying in a smooth loop */}
-      <div className="absolute top-[8vh] left-0 w-[120px] h-[1.5px] bg-gradient-to-r from-transparent via-orange-500 to-white shadow-[0_0_12px_rgba(249,115,22,0.85)] pointer-events-none -z-10 animate-shooting-star"></div>
+      {/* Cinematic Shooting Stars Overlay */}
+      <ShootingStarsOverlay />
 
       {/* Main Container (Reduced to max-w-xl for compact Chat UI width) */}
       <div className="flex-1 max-w-xl w-full mx-auto flex flex-col justify-between relative z-10 h-full">
-        
+
         {/* Header showing logo only when active */}
         {hasStarted && (
           <div className="text-center py-2 border-b border-zinc-800/40">
-            <span className="font-kenyan italic font-black text-3xl tracking-widest text-orange-500 drop-shadow-[0_0_15px_rgba(234,88,12,0.5)]">
+            <motion.span
+              layoutId="tripz-logo"
+              className="inline-block font-kenyan italic font-black text-3xl tracking-widest text-orange-500 drop-shadow-[0_0_15px_rgba(234,88,12,0.5)]"
+            >
               TRIPZ
-            </span>
+            </motion.span>
           </div>
         )}
 
@@ -151,9 +156,12 @@ export default function Home() {
           {!hasStarted ? (
             // Centered Welcome View with Kenyan Coffee TRIPZ font
             <div className="flex flex-col items-center justify-start h-full pt-[16vh] space-y-4">
-              <h1 className="font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] tracking-wider select-none retro-text leading-none">
+              <motion.h1
+                layoutId="tripz-logo"
+                className="font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] tracking-wider select-none retro-text leading-none"
+              >
                 TRIPZ
-              </h1>
+              </motion.h1>
               <p className="text-zinc-300 text-sm max-w-sm text-center leading-relaxed font-sans bg-zinc-950/40 p-4 rounded-2xl border border-zinc-800/30 backdrop-blur-sm shadow-xl">
                 Enter your travel coordinates. Our collaborative AI agents will coordinate and draft a consensus itinerary.
               </p>
@@ -161,7 +169,7 @@ export default function Home() {
           ) : (
             // Active Stream & Results View
             <div className="space-y-6 max-h-full overflow-y-auto pr-1">
-              
+
               {/* Agent Orchestrator Visualizer Status */}
               <div className="grid grid-cols-4 gap-2 border-b border-zinc-800/40 pb-4">
                 {[
@@ -173,15 +181,14 @@ export default function Home() {
                   const isActive = activeStep === agent.step;
                   const isCompleted = activeStep > agent.step;
                   return (
-                    <div 
-                      key={i} 
-                      className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all duration-300 ${
-                        isActive 
-                          ? "border-orange-500/50 bg-orange-950/10"
-                          : isCompleted
+                    <div
+                      key={i}
+                      className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all duration-300 ${isActive
+                        ? "border-orange-500/50 bg-orange-950/10"
+                        : isCompleted
                           ? "border-orange-500/20 bg-zinc-900/40 opacity-80"
                           : "border-zinc-800/60 bg-zinc-900/10 opacity-40"
-                      }`}
+                        }`}
                     >
                       <agent.icon className={`h-4 w-4 ${isActive || isCompleted ? "text-orange-500" : "text-zinc-500"}`} />
                       <span className="text-[9px] font-bold mt-1 text-zinc-400">{agent.name}</span>
@@ -196,7 +203,7 @@ export default function Home() {
                   <span className="text-[9px] font-mono text-zinc-500">AGENT FLOW</span>
                   <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse"></span>
                 </div>
-                
+
                 <h3 className="font-bold text-[10px] tracking-wider text-orange-400 uppercase flex items-center gap-1.5">
                   <Activity className="h-3.5 w-3.5 text-orange-500" />
                   Consensus Stream
@@ -206,12 +213,11 @@ export default function Home() {
                   {simulationLogs.map((log) => (
                     <div key={log.id} className="border-l border-orange-500/20 pl-3 py-0.5">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
-                          log.agent === "Planner" ? "bg-blue-500/10 text-blue-400" :
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${log.agent === "Planner" ? "bg-blue-500/10 text-blue-400" :
                           log.agent === "Budget" ? "bg-emerald-500/10 text-emerald-400" :
-                          log.agent === "Logistics" ? "bg-amber-500/10 text-amber-400" :
-                          "bg-purple-500/10 text-purple-400"
-                        }`}>
+                            log.agent === "Logistics" ? "bg-amber-500/10 text-amber-400" :
+                              "bg-purple-500/10 text-purple-400"
+                          }`}>
                           {log.agent}
                         </span>
                         {log.status === "thinking" ? (
@@ -297,12 +303,12 @@ export default function Home() {
 
         {/* Input box fixed at bottom */}
         <div className="w-full pb-16 pt-4 bg-transparent">
-          <PromptInputBox 
-            onSend={handleSend} 
+          <PromptInputBox
+            onSend={handleSend}
             isLoading={isProcessing}
-            placeholder="Plan a route or state coordinates..." 
+            placeholder="Plan a route or state coordinates..."
           />
-          <div className="text-[10px] text-zinc-500 text-center mt-2 flex items-center justify-center gap-1">
+          <div className="text-[10px] text-white-500 text-center mt-2 flex items-center justify-center gap-1">
             <Sparkles className="h-3 w-3 text-orange-500/70" />
             <span>Multi-Agent debate triggers automatically upon input.</span>
           </div>
