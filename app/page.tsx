@@ -24,7 +24,20 @@ interface AgentMessage {
   status: "thinking" | "completed";
   text: string;
   timestamp: string;
+  isError?: boolean;
 }
+
+// Maps backend graph node names → frontend bento card names + step index
+const AGENT_MAP: Record<string, { name: "Planner" | "Budget" | "Transit" | "Curator"; step: number }> = {
+  "supervisor_agent": { name: "Planner", step: 0 },
+  "routing_agent":    { name: "Planner", step: 0 },
+  "parallel_tools":   { name: "Budget", step: 1 },
+  "budget_agent":     { name: "Budget", step: 1 },
+  "itinerary_agent":  { name: "Transit", step: 2 },
+  "critic_agent":     { name: "Curator", step: 3 },
+  "replanning_agent": { name: "Curator", step: 3 },
+  "clarify_node":     { name: "Curator", step: 3 },
+};
 
 const isTripRelated = (text: string): boolean => {
   let cleanText = text;
@@ -93,7 +106,7 @@ export default function Home() {
     mouseY.set(y);
   };
 
-  const runAgentSimulation = async (userInput: string) => {
+  const runAgentSimulation = async (userInput: string, provider: string = "ollama", apiKey: string = "") => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -110,9 +123,18 @@ export default function Home() {
       const response = await fetch("http://localhost:8000/api/v1/plan/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_request: userInput, stream: true }),
+        body: JSON.stringify({ 
+          user_request: userInput, 
+          stream: true,
+          provider: provider,
+          api_key: apiKey
+        }),
         signal: controller.signal,
       });
+
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -142,31 +164,39 @@ export default function Home() {
                 if (eventType === "agent_start") {
                   setSimulationStage("agents");
                   
-                  let mappedAgent = "Planner";
-                  let step = 0;
-                  if (data.agent === "budget_agent" || data.agent === "parallel_tools") { mappedAgent = "Budget"; step = 1; }
-                  else if (data.agent === "itinerary_agent") { mappedAgent = "Transit"; step = 2; }
-                  else if (data.agent === "critic_agent" || data.agent === "replanning_agent") { mappedAgent = "Curator"; step = 3; }
-                  
-                  setActiveStep(step);
+                  const mapped = AGENT_MAP[data.agent] || { name: "Planner" as const, step: 0 };
+                  setActiveStep(mapped.step);
                   setSimulationLogs(prev => [...prev, {
                     id: String(logCounter++),
-                    agent: mappedAgent as any,
+                    agent: mapped.name,
                     status: "thinking",
                     text: data.message || `Running ${data.agent}...`,
                     timestamp: new Date().toLocaleTimeString()
                   }]);
                 } else if (eventType === "agent_complete") {
+                  const mapped = AGENT_MAP[data.agent];
                   setSimulationLogs(prev => {
                     const newLogs = [...prev];
-                    if (newLogs.length > 0) {
-                      newLogs[newLogs.length - 1].status = "completed";
-                      if (data.preview && Object.keys(data.preview).length > 0) {
-                        const previewText = JSON.stringify(data.preview)
-                           .replace(/["{}]/g, "")
-                           .replace(/:/g, ": ")
-                           .replace(/,/g, " | ");
-                        newLogs[newLogs.length - 1].text += ` → ${previewText}`;
+                    // Find the last log for this specific agent and mark it completed
+                    const targetAgent = mapped?.name;
+                    for (let i = newLogs.length - 1; i >= 0; i--) {
+                      if (targetAgent && newLogs[i].agent === targetAgent && newLogs[i].status === "thinking") {
+                        newLogs[i].status = "completed";
+                        if (data.preview && Object.keys(data.preview).length > 0) {
+                          const previewText = JSON.stringify(data.preview)
+                             .replace(/["{}]/g, "")
+                             .replace(/:/g, ": ")
+                             .replace(/,/g, " | ");
+                          newLogs[i].text += ` → ${previewText}`;
+                        }
+                        break;
+                      }
+                    }
+                    // Fallback: if no matching agent found, update the last thinking log
+                    if (!targetAgent) {
+                      const lastThinking = newLogs.findLastIndex(l => l.status === "thinking");
+                      if (lastThinking >= 0) {
+                        newLogs[lastThinking].status = "completed";
                       }
                     }
                     return newLogs;
@@ -177,12 +207,15 @@ export default function Home() {
                   setSimulationStage("done");
                   setIsProcessing(false);
                 } else if (eventType === "error") {
+                  // Determine which agent was active when the error occurred
+                  const errorMapped = AGENT_MAP[data.agent] || { name: "Planner" as const, step: 0 };
                   setSimulationLogs(prev => [...prev, {
                     id: String(logCounter++),
-                    agent: "Planner",
+                    agent: errorMapped.name,
                     status: "completed",
-                    text: `Error: ${data.message}`,
-                    timestamp: new Date().toLocaleTimeString()
+                    text: data.message || "An error occurred",
+                    timestamp: new Date().toLocaleTimeString(),
+                    isError: true,
                   }]);
                   setIsProcessing(false);
                   setSimulationStage("done");
@@ -203,7 +236,8 @@ export default function Home() {
         agent: "Planner",
         status: "completed",
         text: `Network Error: Could not connect to backend.`,
-        timestamp: new Date().toLocaleTimeString()
+        timestamp: new Date().toLocaleTimeString(),
+        isError: true,
       }]);
       setIsProcessing(false);
       setSimulationStage("done");
@@ -214,7 +248,7 @@ export default function Home() {
     }
   };
 
-  const handleSend = (msg: string) => {
+  const handleSend = (msg: string, files?: File[], provider: string = "ollama", apiKey: string = "") => {
     if (!msg || msg.trim() === "") return;
     
     if (!isTripRelated(msg)) {
@@ -223,7 +257,7 @@ export default function Home() {
     }
     
     setValidationError(null);
-    runAgentSimulation(msg);
+    runAgentSimulation(msg, provider, apiKey);
   };
 
   const handleStop = () => {
@@ -238,8 +272,8 @@ export default function Home() {
 
   const bentoAgents = [
     { name: "Planner", icon: Compass, step: 0 },
-    { name: "Transit", icon: Plane, step: 2 },
     { name: "Budget", icon: DollarSign, step: 1 },
+    { name: "Transit", icon: Plane, step: 2 },
     { name: "Curator", icon: MapPin, step: 3 }
   ];
 
@@ -282,7 +316,7 @@ export default function Home() {
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 max-w-4xl w-full mx-auto flex flex-col justify-between relative z-10 h-full p-4 md:p-6 pt-20">
+      <div className="flex-1 max-w-5xl w-full mx-auto flex flex-col justify-between relative z-10 h-full p-4 md:p-6 pt-20">
 
         {/* Chat / Visualization Screen */}
         <div className="flex-1 flex flex-col justify-center overflow-y-auto scrollbar-none py-4">
@@ -339,15 +373,16 @@ export default function Home() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, staggerChildren: 0.1 }}
-                className="flex flex-col h-full space-y-6 overflow-y-auto pr-2 pb-10"
+                className="flex flex-col justify-center items-center h-full w-full space-y-6 overflow-y-auto pr-2 pb-10"
               >
-                {/* 4 Bento Grids */}
-                <div className="grid grid-cols-2 gap-4 flex-shrink-0">
+                {/* Bento Zone */}
+                <div className="flex items-center justify-center gap-6 flex-shrink-0 w-full max-w-5xl mx-auto py-4">
                   {bentoAgents.map((agent, i) => {
                     const isActive = activeStep === agent.step;
                     const isCompleted = activeStep > agent.step;
                     const isPending = activeStep < agent.step;
                     const logs = simulationLogs.filter(l => l.agent === agent.name);
+                    const hasError = logs.some(l => l.isError === true);
                     
                     return (
                       <motion.div
@@ -355,33 +390,60 @@ export default function Home() {
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: i * 0.1 }}
-                        className={`relative overflow-hidden flex flex-col p-5 rounded-3xl border transition-all duration-500 ${
-                          isActive
-                            ? "border-orange-500/50 bg-orange-950/20 shadow-[0_0_30px_rgba(234,88,12,0.15)]"
-                            : isCompleted
-                              ? "border-zinc-700/60 bg-zinc-900/40"
-                              : "border-zinc-800/40 bg-zinc-950/40 opacity-60"
-                        } backdrop-blur-md h-36`}
+                        className={`relative overflow-hidden flex flex-col p-5 rounded-2xl border transition-all duration-500 flex-1 min-w-0 ${
+                          hasError
+                            ? "border-red-500/50 bg-red-950/20 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
+                            : isActive
+                              ? "border-orange-500/50 bg-orange-950/20 shadow-[0_0_20px_rgba(234,88,12,0.15)]"
+                              : isCompleted
+                                ? "border-emerald-500/30 bg-emerald-950/10 shadow-[0_0_15px_rgba(16,185,129,0.05)]"
+                                : "border-zinc-800/40 bg-zinc-950/40 opacity-60"
+                        } backdrop-blur-md h-48`}
                       >
+                        {/* Header */}
                         <div className="flex items-center justify-between mb-3 shrink-0">
-                          <div className="flex items-center gap-2">
-                            <div className={`p-2 rounded-xl transition-colors duration-500 ${isActive ? 'bg-orange-500/20 text-orange-400' : isCompleted ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-900 text-zinc-600'}`}>
-                              <agent.icon className="h-4 w-4" />
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`p-2 rounded-xl transition-colors duration-500 shrink-0 ${
+                              hasError
+                                ? 'bg-red-500/20 text-red-400'
+                                : isActive 
+                                  ? 'bg-orange-500/20 text-orange-400 animate-pulse' 
+                                  : isCompleted 
+                                    ? 'bg-emerald-500/20 text-emerald-400' 
+                                    : 'bg-zinc-900 text-zinc-600'
+                            }`}>
+                              <agent.icon className="h-4.5 w-4.5" />
                             </div>
-                            <span className={`font-bold tracking-wide text-sm transition-colors duration-500 ${isActive || isCompleted ? 'text-white' : 'text-zinc-500'}`}>{agent.name}</span>
+                            <span className={`font-bold tracking-wide text-xs md:text-sm truncate transition-colors duration-500 ${
+                              hasError
+                                ? 'text-red-300'
+                                : isActive || isCompleted 
+                                  ? 'text-white' 
+                                  : 'text-zinc-500'
+                            }`}>{agent.name}</span>
                           </div>
-                          {isActive && <Loader2 className="h-4 w-4 text-orange-500 animate-spin" />}
-                          {isCompleted && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                          {hasError && <div className="h-2 w-2 rounded-full bg-red-500 animate-ping" />}
+                          {isActive && !hasError && <Loader2 className="h-4 w-4 text-orange-500 animate-spin" />}
+                          {isCompleted && !hasError && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                         </div>
                         
-                        <div className="flex-1 text-xs text-zinc-400 font-mono overflow-y-auto scrollbar-none flex flex-col justify-end">
-                          {isPending && <span className="text-zinc-600 italic">Waiting...</span>}
-                          {logs.map((log, idx) => (
-                            <div key={idx} className="mb-1 last:mb-0 line-clamp-2">
-                              <span className="text-zinc-500 mr-2">[{log.timestamp}]</span>
-                              <span className={log.status === 'completed' ? 'text-emerald-400/80' : 'text-orange-300/80'}>{log.text}</span>
+                        {/* Content */}
+                        <div className="flex-1 text-xs md:text-[13px] text-zinc-400 font-mono flex flex-col justify-center min-w-0">
+                          {hasError ? (
+                            <span className="text-red-400 font-semibold">Error</span>
+                          ) : isPending ? (
+                            <span className="text-zinc-600 italic">Pending</span>
+                          ) : isActive ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-orange-400 font-semibold animate-pulse">Generating</span>
+                              {logs.length > 0 && <span className="text-zinc-500 line-clamp-3 text-[10px] md:text-[11px] leading-normal mt-1">{logs[logs.length - 1].text}</span>}
                             </div>
-                          ))}
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-emerald-400 font-semibold">Completed</span>
+                              {logs.length > 0 && <span className="text-zinc-500 line-clamp-3 text-[10px] md:text-[11px] leading-normal mt-1">{logs[logs.length - 1].text}</span>}
+                            </div>
+                          )}
                         </div>
 
                         {isActive && (

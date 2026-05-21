@@ -3,7 +3,7 @@
 import React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowUp, Paperclip, Square, X, StopCircle, Mic, History } from "lucide-react";
+import { ArrowUp, Paperclip, Square, X, StopCircle, Mic, History, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Utility function for className merging
@@ -442,7 +442,7 @@ const CustomDivider: React.FC = () => (
 
 // Main PromptInputBox Component
 interface PromptInputBoxProps {
-  onSend?: (message: string, files?: File[]) => void;
+  onSend?: (message: string, files?: File[], provider?: string, apiKey?: string) => void;
   onStop?: () => void;
   isLoading?: boolean;
   placeholder?: string;
@@ -456,6 +456,26 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
   const [isRecording, setIsRecording] = React.useState(false);
   const [showHistory, setShowHistory] = React.useState(false);
+  
+  // Settings State
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [provider, setProvider] = React.useState("ollama");
+  const [apiKey, setApiKey] = React.useState("");
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedProvider = localStorage.getItem("tripz_provider");
+      const savedKey = localStorage.getItem("tripz_api_key");
+      if (savedProvider) setProvider(savedProvider);
+      if (savedKey) setApiKey(savedKey);
+    }
+  }, []);
+
+  const saveSettings = () => {
+    localStorage.setItem("tripz_provider", provider);
+    localStorage.setItem("tripz_api_key", apiKey);
+    setShowSettings(false);
+  };
 
   const promptBoxRef = React.useRef<HTMLDivElement>(null);
   const uploadInputRef = React.useRef<HTMLInputElement>(null);
@@ -532,7 +552,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
       let messagePrefix = "";
       if (showHistory) messagePrefix = "[History Context: ";
       const formattedInput = messagePrefix ? `${messagePrefix}${input}]` : input;
-      onSend(formattedInput, files);
+      onSend(formattedInput, files, provider, apiKey);
       setInput("");
       setFiles([]);
       setFilePreviews({});
@@ -648,6 +668,17 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
               </button>
             </PromptInputAction>
 
+            <PromptInputAction tooltip="Settings">
+              <button
+                type="button"
+                onClick={() => setShowSettings(true)}
+                className="flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB]"
+                disabled={isRecording}
+              >
+                <Settings className="h-5 w-5 transition-colors" />
+              </button>
+            </PromptInputAction>
+
             <div className="flex items-center">
               <PromptInputAction tooltip="History">
                 <button
@@ -732,6 +763,54 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
       </PromptInput>
 
       <ImageViewDialog imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
+
+      {/* Settings Modal */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="max-w-[400px] p-6 bg-[#1F2023]/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl">
+          <DialogTitle className="text-xl font-bold mb-4 text-white flex items-center gap-2">
+            <Settings className="h-5 w-5 text-orange-400" />
+            Model Settings
+          </DialogTitle>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-300">LLM Provider</label>
+              <select
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+                className="w-full bg-[#09090b]/80 border border-white/10 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50"
+              >
+                <option value="ollama">Ollama (Local - gemma2:2b)</option>
+                <option value="openai">OpenAI (gpt-4o-mini)</option>
+                <option value="anthropic">Anthropic (claude-3-haiku)</option>
+                <option value="gemini">Google Gemini (gemini-2.5-flash)</option>
+                <option value="groq">Groq (llama-3.3-70b)</option>
+                <option value="openrouter">OpenRouter (llama-3.1-8b)</option>
+              </select>
+            </div>
+
+            {provider !== "ollama" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300">API Key</label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={`Enter ${provider} API Key`}
+                  className="w-full bg-[#09090b]/80 border border-white/10 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50"
+                />
+              </div>
+            )}
+
+            <Button
+              onClick={saveSettings}
+              className="w-full mt-4 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg"
+            >
+              Save Settings
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 });
