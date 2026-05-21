@@ -18,7 +18,7 @@
       opacity: 0;
     }
     10% {
-      transform: translate3d(-15vw, 5vh, 0) rotate(162deg) scale(var(--star-scale, 1));
+      transform: translate3d(-20vw, 6.67vh, 0) rotate(162deg) scale(var(--star-scale, 1));
       opacity: var(--star-opacity, 1);
     }
     30% {

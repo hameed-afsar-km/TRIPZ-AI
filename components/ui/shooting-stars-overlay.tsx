@@ -16,16 +16,16 @@ export default function ShootingStarsOverlay() {
   >([]);
 
   useEffect(() => {
-    // Generate 8 randomized stars to keep it subtle and elegant
+    // Generate 8 stars with perfectly spaced delays and uniform speed/duration
     const newStars = Array.from({ length: 8 }).map((_, i) => ({
       id: i,
       // Random starting positions predominantly in the top-right quadrant
       top: Math.random() * 50 - 20, // -20% to 30% from top
       left: Math.random() * 50 + 50, // 50% to 100% from left
-      // Random delays from 0s to 20s
-      delay: Math.random() * 20,
-      // Random duration from 4s to 10s to ensure different speeds
-      duration: Math.random() * 6 + 4,
+      // Uniform evenly-spaced delays (1s apart for an 8s loop) to maintain constant frequency
+      delay: i,
+      // Uniform duration of 8s to ensure identical travel speed across all stars
+      duration: 8,
       // Random scale to simulate distance (0.5 to 1.5)
       scale: Math.random() * 1 + 0.5,
       // Random peak opacity for fading (0.4 to 1)
@@ -46,7 +46,7 @@ export default function ShootingStarsOverlay() {
             left: `${star.left}%`,
             animationDelay: `${star.delay}s`,
             animationDuration: `${star.duration}s`,
-            animationTimingFunction: "cubic-bezier(0.25, 1, 0.5, 1)",
+            animationTimingFunction: "linear",
             // Use custom CSS variables to pass randomized values to keyframes
             "--star-scale": star.scale,
             "--star-opacity": star.opacity,
