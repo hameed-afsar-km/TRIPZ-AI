@@ -37,11 +37,14 @@ body {
   color: var(--foreground);
 }
 
+.logo-base-3d {
+  letter-spacing: 0.12em;
+}
+
 .retro-text {
   color: #f97316;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
   text-shadow: 
     -3px 0px 0px rgba(255, 255, 255, 0.4), 
     3px 0px 0px rgba(194, 65, 12, 0.8), 

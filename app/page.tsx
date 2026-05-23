@@ -98,6 +98,10 @@ export default function Home() {
   const bgX = useTransform(springX, [-0.5, 0.5], ["-3%", "3%"]);
   const bgY = useTransform(springY, [-0.5, 0.5], ["-3%", "3%"]);
 
+  // 3D Text Parallax Rotation
+  const textRotateX = useTransform(springY, [-0.5, 0.5], [15, -15]); // Tilt up/down
+  const textRotateY = useTransform(springX, [-0.5, 0.5], [-15, 15]); // Tilt left/right
+
   const handleMouseMove = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width - 0.5;
@@ -120,7 +124,7 @@ export default function Home() {
     setItineraryResult(null);
 
     try {
-      const response = await fetch("http://localhost:8000/api/v1/plan/stream", {
+      const response = await fetch("/api/v1/plan/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -330,10 +334,51 @@ export default function Home() {
                 transition={{ duration: 0.4 }}
                 className="flex flex-col items-center justify-center h-full pt-[8vh] space-y-6"
               >
-                <motion.div layoutId="tripz-logo-container">
-                  <h1 className="font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] tracking-wider select-none retro-text leading-none">
-                    TRIPZ
-                  </h1>
+                <motion.div 
+                  layoutId="tripz-logo-container"
+                  style={{ perspective: 1200 }}
+                  className="flex items-center justify-center"
+                >
+                  <motion.div
+                    style={{
+                      rotateX: textRotateX,
+                      rotateY: textRotateY,
+                      transformStyle: "preserve-3d",
+                    }}
+                    className="relative flex items-center justify-center"
+                  >
+                    {/* Deep Ambient Occlusion Shadow */}
+                    <span 
+                      className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-black/55 select-none blur-[10px] text-center"
+                      style={{ transform: "translateZ(-35px) translateY(8px)" }}
+                    >
+                      TRIPZ
+                    </span>
+
+                    {/* Back Ambient Glow */}
+                    <span 
+                      className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-orange-950 select-none blur-[6px] text-center"
+                      style={{ transform: "translateZ(-20px)" }}
+                    >
+                      TRIPZ
+                    </span>
+
+                    {/* Mid Extrusion Layer */}
+                    <span 
+                      className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-orange-800 select-none text-center"
+                      style={{ transform: "translateZ(-8px)" }}
+                    >
+                      TRIPZ
+                    </span>
+
+                    {/* Front Interactive Text Layer */}
+                    <h1 
+                      className="font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d select-none retro-text leading-none relative z-10 text-center"
+                      style={{ transform: "translateZ(25px)" }}
+                    >
+                      TRIPZ
+                    </h1>
+                  </motion.div>
                 </motion.div>
                 <p className="text-zinc-300 text-sm max-w-sm text-center leading-relaxed font-sans bg-zinc-950/40 p-4 rounded-2xl border border-zinc-800/30 backdrop-blur-sm shadow-xl">
                   Enter your travel coordinates. Our collaborative AI agents will coordinate and draft a consensus itinerary.
