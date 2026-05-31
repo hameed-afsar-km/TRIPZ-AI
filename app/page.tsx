@@ -566,6 +566,28 @@ export default function Home() {
                 </div>
 
                 <AnimatePresence>
+                  {simulationStage === "done" && itineraryResult && itineraryResult.error_type && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.6, type: "spring", bounce: 0.4 }}
+                      className="flex gap-4 mt-6 w-full max-w-2xl mx-auto"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-red-600/20 mt-1">
+                        <Bot className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex-1 bg-zinc-900/60 p-6 rounded-3xl border border-red-800/40 backdrop-blur-md">
+                        <div className="flex flex-col items-center py-8 text-center">
+                          <div className="text-3xl mb-3">{itineraryResult.error_type === "quota_exceeded" ? "⚠️" : "📏"}</div>
+                          <p className="text-red-400 font-semibold mb-1">
+                            {itineraryResult.error_type === "quota_exceeded" ? "API Rate Limit Reached" : "Token Limit Exceeded"}
+                          </p>
+                          <p className="text-zinc-400 text-xs max-w-sm">{itineraryResult.error}</p>
+                          <p className="text-zinc-500 text-xs mt-4">Try switching to a different provider in Settings, or wait before retrying.</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
                   {simulationStage === "done" && itineraryResult && !itineraryResult.error_type && (
                     <motion.div
                       initial={{ opacity: 0, y: 30, scale: 0.95 }}
