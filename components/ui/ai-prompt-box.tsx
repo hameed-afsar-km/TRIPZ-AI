@@ -780,7 +780,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
                 onChange={(e) => setProvider(e.target.value)}
                 className="w-full bg-[#09090b]/80 border border-white/10 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50"
               >
-                <option value="ollama">Ollama (Local - gemma2:2b)</option>
+                <option value="ollama">Ollama (Local - qwen2.5:1.5b)</option>
                 <option value="openai">OpenAI (gpt-4o-mini)</option>
                 <option value="anthropic">Anthropic (claude-3-haiku)</option>
                 <option value="gemini">Google Gemini (gemini-2.5-flash)</option>
@@ -804,9 +804,14 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
 
             <Button
               onClick={saveSettings}
-              className="w-full mt-4 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg"
+              className="w-full mt-4 bg-zinc-950/60 backdrop-blur-md border border-orange-500/30 text-orange-400 font-medium rounded-2xl transition-all duration-200"
             >
-              Save Settings
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" />
+                </svg>
+                Save Settings
+              </span>
             </Button>
           </div>
         </DialogContent>

@@ -27,15 +27,12 @@ interface AgentMessage {
   isError?: boolean;
 }
 
-// Maps backend graph node names → frontend bento card names + step index
 const AGENT_MAP: Record<string, { name: "Planner" | "Budget" | "Transit" | "Curator"; step: number }> = {
   "supervisor_agent": { name: "Planner", step: 0 },
-  "routing_agent":    { name: "Planner", step: 0 },
-  "parallel_tools":   { name: "Budget", step: 1 },
   "budget_agent":     { name: "Budget", step: 1 },
-  "itinerary_agent":  { name: "Transit", step: 2 },
-  "critic_agent":     { name: "Curator", step: 3 },
-  "replanning_agent": { name: "Curator", step: 3 },
+  "transit_agent":    { name: "Transit", step: 2 },
+  "curator_agent":    { name: "Curator", step: 3 },
+  "itinerary_agent":  { name: "Planner", step: 0 },
   "clarify_node":     { name: "Curator", step: 3 },
 };
 
@@ -44,13 +41,8 @@ const isTripRelated = (text: string): boolean => {
   if (text.startsWith("[History Context:") && text.endsWith("]")) {
     cleanText = text.slice(17, -1);
   }
-  
   const normalized = cleanText.toLowerCase().trim();
-  
-  if (normalized.length < 3) {
-    return false;
-  }
-  
+  if (normalized.length < 3) return false;
   const travelKeywords = [
     "trip", "travel", "plan", "itinerary", "visit", "vacation", "holiday", 
     "tour", "flight", "hotel", "budget", "route", "explore", "stay", 
@@ -58,22 +50,17 @@ const isTripRelated = (text: string): boolean => {
     "cost", "pricing", "attraction", "sightseeing", "museum", "park", "beach",
     "map", "coordinate", "activities", "schedule", "guide"
   ];
-  
   const geographicKeywords = [
     "tokyo", "paris", "london", "rome", "kyoto", "osaka", "bali", "new york", "hawaii", "sydney", "barcelona",
     "japan", "france", "italy", "spain", "usa", "uk", "india", "germany", "canada", "australia", "china",
     "mexico", "brazil", "egypt", "greece", "thailand", "vietnam", "singapore", "malaysia", "switzerland"
   ];
-
   const hasTravelKeyword = travelKeywords.some(keyword => normalized.includes(keyword));
   if (hasTravelKeyword) return true;
-
   const hasGeographicKeyword = geographicKeywords.some(geo => normalized.includes(geo));
   if (hasGeographicKeyword) return true;
-
   const travelPatterns = /\b(to|in|at|visit|explore|around|go)\s+[a-z]+/i;
   if (travelPatterns.test(normalized)) return true;
-
   return false;
 };
 
@@ -84,23 +71,19 @@ export default function Home() {
   const [simulationStage, setSimulationStage] = useState<"idle" | "parsing" | "agents" | "done">("idle");
   const [itineraryResult, setItineraryResult] = useState<any>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [streamingTokens, setStreamingTokens] = useState<string>("");
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // 3D Parallax Mouse Tracking
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
-
   const springConfig = { damping: 25, stiffness: 150 };
   const springX = useSpring(mouseX, springConfig);
   const springY = useSpring(mouseY, springConfig);
-
   const bgX = useTransform(springX, [-0.5, 0.5], ["-3%", "3%"]);
   const bgY = useTransform(springY, [-0.5, 0.5], ["-3%", "3%"]);
-
-  // 3D Text Parallax Rotation
-  const textRotateX = useTransform(springY, [-0.5, 0.5], [15, -15]); // Tilt up/down
-  const textRotateY = useTransform(springX, [-0.5, 0.5], [-15, 15]); // Tilt left/right
+  const textRotateX = useTransform(springY, [-0.5, 0.5], [15, -15]);
+  const textRotateY = useTransform(springX, [-0.5, 0.5], [-15, 15]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -117,10 +100,20 @@ export default function Home() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    setSimulationStage("parsing");
+    let logCounter = 1;
+    setSimulationStage("agents");
     setIsProcessing(true);
-    setSimulationLogs([]);
-    setActiveStep(-1);
+    setStreamingTokens("");
+    setSimulationLogs([
+      {
+        id: "init",
+        agent: "Planner",
+        status: "thinking",
+        text: "Orchestrator parsing request: Analyzing input and preparing agent workspaces...",
+        timestamp: new Date().toLocaleTimeString(),
+      }
+    ]);
+    setActiveStep(0);
     setItineraryResult(null);
 
     try {
@@ -146,7 +139,6 @@ export default function Home() {
       if (reader) {
         let done = false;
         let buffer = "";
-        let logCounter = 1;
 
         while (!done) {
           const { value, done: readerDone } = await reader.read();
@@ -165,23 +157,40 @@ export default function Home() {
                 const dataStr = dataMatch[1].trim();
                 const data = JSON.parse(dataStr);
 
-                if (eventType === "agent_start") {
+                if (eventType === "start") {
+                  setSimulationLogs(prev => 
+                    prev.map(l => l.id === "init" ? {
+                      ...l,
+                      text: data.message || "TRIPZ agents initializing...",
+                    } : l)
+                  );
+                } else if (eventType === "token") {
+                  setStreamingTokens(prev => prev + data.token);
+                } else if (eventType === "agent_start") {
+                  setStreamingTokens("");
                   setSimulationStage("agents");
-                  
                   const mapped = AGENT_MAP[data.agent] || { name: "Planner" as const, step: 0 };
                   setActiveStep(mapped.step);
-                  setSimulationLogs(prev => [...prev, {
-                    id: String(logCounter++),
-                    agent: mapped.name,
-                    status: "thinking",
-                    text: data.message || `Running ${data.agent}...`,
-                    timestamp: new Date().toLocaleTimeString()
-                  }]);
+                  setSimulationLogs(prev => {
+                    if (data.agent === "supervisor_agent") {
+                      return prev.map(l => l.id === "init" ? {
+                        ...l,
+                        text: data.message || "Parsing your travel request...",
+                      } : l);
+                    }
+                    return [...prev, {
+                      id: String(logCounter++),
+                      agent: mapped.name,
+                      status: "thinking",
+                      text: data.message || `Running ${data.agent}...`,
+                      timestamp: new Date().toLocaleTimeString()
+                    }];
+                  });
                 } else if (eventType === "agent_complete") {
+                  setStreamingTokens("");
                   const mapped = AGENT_MAP[data.agent];
                   setSimulationLogs(prev => {
                     const newLogs = [...prev];
-                    // Find the last log for this specific agent and mark it completed
                     const targetAgent = mapped?.name;
                     for (let i = newLogs.length - 1; i >= 0; i--) {
                       if (targetAgent && newLogs[i].agent === targetAgent && newLogs[i].status === "thinking") {
@@ -196,22 +205,20 @@ export default function Home() {
                         break;
                       }
                     }
-                    // Fallback: if no matching agent found, update the last thinking log
                     if (!targetAgent) {
                       const lastThinking = newLogs.findLastIndex(l => l.status === "thinking");
-                      if (lastThinking >= 0) {
-                        newLogs[lastThinking].status = "completed";
-                      }
+                      if (lastThinking >= 0) newLogs[lastThinking].status = "completed";
                     }
                     return newLogs;
                   });
                 } else if (eventType === "done") {
+                  setStreamingTokens("");
                   setItineraryResult(data);
                   setActiveStep(4);
                   setSimulationStage("done");
                   setIsProcessing(false);
                 } else if (eventType === "error") {
-                  // Determine which agent was active when the error occurred
+                  setStreamingTokens("");
                   const errorMapped = AGENT_MAP[data.agent] || { name: "Planner" as const, step: 0 };
                   setSimulationLogs(prev => [...prev, {
                     id: String(logCounter++),
@@ -254,12 +261,10 @@ export default function Home() {
 
   const handleSend = (msg: string, files?: File[], provider: string = "ollama", apiKey: string = "") => {
     if (!msg || msg.trim() === "") return;
-    
     if (!isTripRelated(msg)) {
       setValidationError("Please type a request related to trip planning (e.g., '3 days in Tokyo', 'Paris budget route', or 'explore Rome').");
       return;
     }
-    
     setValidationError(null);
     runAgentSimulation(msg, provider, apiKey);
   };
@@ -286,22 +291,14 @@ export default function Home() {
       onMouseMove={handleMouseMove}
       className="h-screen text-[#f4f4f5] font-sans selection:bg-orange-500/30 selection:text-orange-400 relative overflow-hidden flex flex-col justify-between"
     >
-      {/* Background Image with 3D Parallax */}
       <motion.div
         className="absolute inset-[-5%] bg-[url('/bg.jpeg')] bg-cover bg-center bg-no-repeat -z-20"
         style={{ x: bgX, y: bgY }}
       />
-
-      {/* Dark frosted glass overlay for readability & image colors blending */}
       <div className="absolute inset-0 bg-[#09090b]/85 backdrop-blur-[3px] -z-10 pointer-events-none"></div>
-
-      {/* Background glow effects matching orange theme */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[140px] pointer-events-none -z-10 animate-pulse duration-[8000ms]"></div>
-
-      {/* Cinematic Shooting Stars Overlay */}
       <ShootingStarsOverlay />
 
-      {/* Header showing logo dynamically */}
       <div className="absolute top-0 left-0 right-0 z-50 flex justify-center py-4 pointer-events-none">
         <AnimatePresence>
           {simulationStage !== "idle" && (
@@ -319,10 +316,7 @@ export default function Home() {
         </AnimatePresence>
       </div>
 
-      {/* Main Container */}
       <div className="flex-1 max-w-5xl w-full mx-auto flex flex-col justify-between relative z-10 h-full p-4 md:p-6 pt-20">
-
-        {/* Chat / Visualization Screen */}
         <div className="flex-1 flex flex-col justify-center overflow-y-auto scrollbar-none py-4">
           <AnimatePresence mode="wait">
             {simulationStage === "idle" && (
@@ -347,35 +341,20 @@ export default function Home() {
                     }}
                     className="relative flex items-center justify-center"
                   >
-                    {/* Deep Ambient Occlusion Shadow */}
-                    <span 
-                      className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-black/55 select-none blur-[10px] text-center"
-                      style={{ transform: "translateZ(-35px) translateY(8px)" }}
-                    >
+                    <span className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-black/55 select-none blur-[10px] text-center"
+                      style={{ transform: "translateZ(-35px) translateY(8px)" }}>
                       TRIPZ
                     </span>
-
-                    {/* Back Ambient Glow */}
-                    <span 
-                      className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-orange-950 select-none blur-[6px] text-center"
-                      style={{ transform: "translateZ(-20px)" }}
-                    >
+                    <span className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-orange-950 select-none blur-[6px] text-center"
+                      style={{ transform: "translateZ(-20px)" }}>
                       TRIPZ
                     </span>
-
-                    {/* Mid Extrusion Layer */}
-                    <span 
-                      className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-orange-800 select-none text-center"
-                      style={{ transform: "translateZ(-8px)" }}
-                    >
+                    <span className="absolute inset-0 flex items-center justify-center font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d leading-none text-orange-800 select-none text-center"
+                      style={{ transform: "translateZ(-8px)" }}>
                       TRIPZ
                     </span>
-
-                    {/* Front Interactive Text Layer */}
-                    <h1 
-                      className="font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d select-none retro-text leading-none relative z-10 text-center"
-                      style={{ transform: "translateZ(25px)" }}
-                    >
+                    <h1 className="font-kenyan italic font-black text-8xl md:text-[8.5rem] lg:text-[10rem] logo-base-3d select-none retro-text leading-none relative z-10 text-center"
+                      style={{ transform: "translateZ(25px)" }}>
                       TRIPZ
                     </h1>
                   </motion.div>
@@ -420,14 +399,15 @@ export default function Home() {
                 transition={{ duration: 0.5, staggerChildren: 0.1 }}
                 className="flex flex-col justify-center items-center h-full w-full space-y-6 overflow-y-auto pr-2 pb-10"
               >
-                {/* Bento Zone */}
                 <div className="flex items-center justify-center gap-6 flex-shrink-0 w-full max-w-5xl mx-auto py-4">
                   {bentoAgents.map((agent, i) => {
-                    const isActive = activeStep === agent.step;
-                    const isCompleted = activeStep > agent.step;
-                    const isPending = activeStep < agent.step;
                     const logs = simulationLogs.filter(l => l.agent === agent.name);
                     const hasError = logs.some(l => l.isError === true);
+                    const isThinking = logs.some(l => l.status === "thinking");
+                    
+                    const isActive = isThinking || activeStep === agent.step;
+                    const isCompleted = logs.length > 0 && logs.every(l => l.status === "completed") && !isThinking;
+                    const isPending = logs.length === 0 && activeStep < agent.step;
                     
                     return (
                       <motion.div
@@ -445,7 +425,6 @@ export default function Home() {
                                 : "border-zinc-800/40 bg-zinc-950/40 opacity-60"
                         } backdrop-blur-md h-48`}
                       >
-                        {/* Header */}
                         <div className="flex items-center justify-between mb-3 shrink-0">
                           <div className="flex items-center gap-2 min-w-0">
                             <div className={`p-2 rounded-xl transition-colors duration-500 shrink-0 ${
@@ -472,16 +451,23 @@ export default function Home() {
                           {isCompleted && !hasError && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                         </div>
                         
-                        {/* Content */}
-                        <div className="flex-1 text-xs md:text-[13px] text-zinc-400 font-mono flex flex-col justify-center min-w-0">
+                        <div className="flex-1 text-xs md:text-[13px] text-zinc-400 font-mono flex flex-col justify-center min-w-0 overflow-hidden">
                           {hasError ? (
                             <span className="text-red-400 font-semibold">Error</span>
                           ) : isPending ? (
                             <span className="text-zinc-600 italic">Pending</span>
                           ) : isActive ? (
-                            <div className="flex flex-col gap-1">
-                              <span className="text-orange-400 font-semibold animate-pulse">Generating</span>
-                              {logs.length > 0 && <span className="text-zinc-500 line-clamp-3 text-[10px] md:text-[11px] leading-normal mt-1">{logs[logs.length - 1].text}</span>}
+                            <div className="flex flex-col gap-1 h-full overflow-hidden">
+                              <span className="text-orange-400 font-semibold animate-pulse shrink-0">Generating</span>
+                              {streamingTokens ? (
+                                <span className="text-zinc-500 text-[10px] md:text-[11px] leading-normal mt-1 overflow-y-auto line-clamp-6 break-words">
+                                  {streamingTokens}
+                                </span>
+                              ) : (
+                                <span className="text-zinc-500 line-clamp-3 text-[10px] md:text-[11px] leading-normal mt-1">
+                                  {logs.length > 0 ? logs[logs.length - 1].text : "thinking..."}
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <div className="flex flex-col gap-1">
@@ -499,14 +485,13 @@ export default function Home() {
                   })}
                 </div>
 
-                {/* Final ChatGPT-style Output */}
                 <AnimatePresence>
                   {simulationStage === "done" && itineraryResult && (
                     <motion.div
                       initial={{ opacity: 0, y: 30, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ duration: 0.6, type: "spring", bounce: 0.4 }}
-                      className="flex gap-4 mt-6"
+                      className="flex gap-4 mt-6 w-full max-w-2xl mx-auto"
                     >
                       <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-600/20 mt-1">
                         <Bot className="w-4 h-4 text-white" />
@@ -535,6 +520,17 @@ export default function Home() {
                                 </div>
                               ))}
                             </div>
+
+                            {itineraryResult.warnings && itineraryResult.warnings.length > 0 && (
+                              <div className="mt-4 pt-4 border-t border-zinc-800/50">
+                                <p className="text-xs text-zinc-500">Warnings: {itineraryResult.warnings.join(" | ")}</p>
+                              </div>
+                            )}
+                            {itineraryResult.duration_ms && (
+                              <div className="mt-2 text-[10px] text-zinc-600">
+                                Generated in {(itineraryResult.duration_ms / 1000).toFixed(1)}s
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -546,7 +542,6 @@ export default function Home() {
           </AnimatePresence>
         </div>
 
-        {/* Input box fixed at bottom */}
         <div className="w-full pb-8 pt-4 bg-transparent mt-auto flex-shrink-0 relative">
           <AnimatePresence>
             {validationError && (
@@ -583,7 +578,6 @@ export default function Home() {
             <span>Multi-Agent debate triggers automatically upon input.</span>
           </div>
         </div>
-
       </div>
     </div>
   );
