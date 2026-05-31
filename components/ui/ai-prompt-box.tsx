@@ -447,15 +447,16 @@ interface PromptInputBoxProps {
   isLoading?: boolean;
   placeholder?: string;
   className?: string;
+  showHistory?: boolean;
+  onHistoryToggle?: () => void;
 }
 export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref: React.Ref<HTMLDivElement>) => {
-  const { onSend = () => {}, onStop = () => {}, isLoading = false, placeholder = "Type your message here...", className } = props;
+  const { onSend = () => {}, onStop = () => {}, isLoading = false, placeholder = "Type your message here...", className, showHistory = false, onHistoryToggle = () => {} } = props;
   const [input, setInput] = React.useState("");
   const [files, setFiles] = React.useState<File[]>([]);
   const [filePreviews, setFilePreviews] = React.useState<{ [key: string]: string }>({});
   const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
   const [isRecording, setIsRecording] = React.useState(false);
-  const [showHistory, setShowHistory] = React.useState(false);
   
   // Settings State
   const [showSettings, setShowSettings] = React.useState(false);
@@ -481,8 +482,6 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   const uploadInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useImperativeHandle(ref, () => promptBoxRef.current as HTMLDivElement);
-
-  const handleHistoryToggle = () => setShowHistory((prev) => !prev);
 
   const isImageFile = (file: File) => file.type.startsWith("image/");
 
@@ -549,10 +548,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
 
   const handleSubmit = () => {
     if (input.trim() || files.length > 0) {
-      let messagePrefix = "";
-      if (showHistory) messagePrefix = "[History Context: ";
-      const formattedInput = messagePrefix ? `${messagePrefix}${input}]` : input;
-      onSend(formattedInput, files, provider, apiKey);
+      onSend(input, files, provider, apiKey);
       setInput("");
       setFiles([]);
       setFilePreviews({});
@@ -683,7 +679,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
               <PromptInputAction tooltip="History">
                 <button
                   type="button"
-                  onClick={handleHistoryToggle}
+                  onClick={onHistoryToggle}
                   className={cn(
                     "rounded-full transition-all flex items-center gap-1 px-2 py-1 border h-8",
                     showHistory

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { PromptInputBox } from "@/components/ui/ai-prompt-box";
+import { HistorySidebar } from "@/components/ui/history-sidebar";
 import ShootingStarsOverlay from "@/components/ui/shooting-stars-overlay";
 import {
   Compass,
@@ -36,12 +37,21 @@ const AGENT_MAP: Record<string, { name: "Planner" | "Budget" | "Transit" | "Cura
   "clarify_node":     { name: "Curator", step: 3 },
 };
 
-const isTripRelated = (text: string): boolean => {
-  let cleanText = text;
-  if (text.startsWith("[History Context:") && text.endsWith("]")) {
-    cleanText = text.slice(17, -1);
+const ERROR_LABELS: Record<string, { title: string; icon: string }> = {
+  quota_exceeded: { title: "API Rate Limit Reached", icon: "⚠️" },
+  token_limit_exceeded: { title: "Token Limit Exceeded", icon: "📏" },
+};
+
+const formatErrorForDisplay = (type: string, message?: string): string => {
+  const label = ERROR_LABELS[type];
+  if (label) {
+    return `${label.icon} ${label.title}${message ? `: ${message}` : ""}. Try again later or switch providers in Settings.`;
   }
-  const normalized = cleanText.toLowerCase().trim();
+  return message || "An unexpected error occurred.";
+};
+
+const isTripRelated = (text: string): boolean => {
+  const normalized = text.toLowerCase().trim();
   if (normalized.length < 3) return false;
   const travelKeywords = [
     "trip", "travel", "plan", "itinerary", "visit", "vacation", "holiday", 
@@ -72,6 +82,16 @@ export default function Home() {
   const [itineraryResult, setItineraryResult] = useState<any>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [streamingTokens, setStreamingTokens] = useState<string>("");
+
+  // Session / History state
+  const [sessionId] = useState(() =>
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : "session-" + Date.now()
+  );
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySessions, setHistorySessions] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -124,7 +144,8 @@ export default function Home() {
           user_request: userInput, 
           stream: true,
           provider: provider,
-          api_key: apiKey
+          api_key: apiKey,
+          session_id: sessionId,
         }),
         signal: controller.signal,
       });
@@ -213,6 +234,10 @@ export default function Home() {
                   });
                 } else if (eventType === "done") {
                   setStreamingTokens("");
+                  if (data.error_type) {
+                    const errorMsg = formatErrorForDisplay(data.error_type, data.error);
+                    setValidationError(errorMsg);
+                  }
                   setItineraryResult(data);
                   setActiveStep(4);
                   setSimulationStage("done");
@@ -279,6 +304,52 @@ export default function Home() {
     setValidationError("Generation stopped by the user.");
   };
 
+  const fetchSessions = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch("/api/v1/sessions");
+      if (res.ok) {
+        const data = await res.json();
+        setHistorySessions(data.sessions || []);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const handleHistoryToggle = useCallback(() => {
+    setShowHistory((prev) => {
+      if (!prev) fetchSessions();
+      return !prev;
+    });
+  }, [fetchSessions]);
+
+  const handleSelectSession = useCallback(async (sid: string) => {
+    try {
+      const res = await fetch(`/api/v1/sessions/${sid}`);
+      if (res.ok) {
+        const data = await res.json();
+        setItineraryResult({ itinerary: data.itinerary });
+        setSimulationStage("done");
+        setShowHistory(false);
+        setActiveStep(4);
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
+
+  const handleDeleteSession = useCallback(async (sid: string) => {
+    try {
+      await fetch(`/api/v1/sessions/${sid}`, { method: "DELETE" });
+      setHistorySessions((prev) => prev.filter((s) => s.session_id !== sid));
+    } catch {
+      // silently fail
+    }
+  }, []);
+
   const bentoAgents = [
     { name: "Planner", icon: Compass, step: 0 },
     { name: "Budget", icon: DollarSign, step: 1 },
@@ -298,6 +369,15 @@ export default function Home() {
       <div className="absolute inset-0 bg-[#09090b]/85 backdrop-blur-[3px] -z-10 pointer-events-none"></div>
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[140px] pointer-events-none -z-10 animate-pulse duration-[8000ms]"></div>
       <ShootingStarsOverlay />
+
+      <HistorySidebar
+        open={showHistory}
+        onClose={() => setShowHistory(false)}
+        onSelectSession={handleSelectSession}
+        onDeleteSession={handleDeleteSession}
+        sessions={historySessions}
+        loading={historyLoading}
+      />
 
       <div className="absolute top-0 left-0 right-0 z-50 flex justify-center py-4 pointer-events-none">
         <AnimatePresence>
@@ -486,7 +566,7 @@ export default function Home() {
                 </div>
 
                 <AnimatePresence>
-                  {simulationStage === "done" && itineraryResult && (
+                  {simulationStage === "done" && itineraryResult && !itineraryResult.error_type && (
                     <motion.div
                       initial={{ opacity: 0, y: 30, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -572,6 +652,8 @@ export default function Home() {
             onStop={handleStop}
             isLoading={isProcessing}
             placeholder="Plan a route or state coordinates..."
+            showHistory={showHistory}
+            onHistoryToggle={handleHistoryToggle}
           />
           <div className="text-[10px] text-white-500 text-center mt-3 flex items-center justify-center gap-1 opacity-70">
             <Sparkles className="h-3 w-3 text-orange-500" />
