@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🧳 TRIPZ·AI
+<picture>
+  <img src="frontend/assets/logo.png" alt="TRIPZ-AI" width="700">
+</picture>
 
 **Multi-Agent AI Travel Operating System**  
 Powered by LangGraph · FastAPI · Next.js
@@ -22,10 +24,6 @@ Powered by LangGraph · FastAPI · Next.js
 [✨ Features](#-features) · [🏗️ Architecture](#️-architecture) · [⚡ Quick Start](#-quick-start) · [🧠 How It Works](#-how-it-works) · [🔧 Configuration](#-configuration)
 
 <br />
-
-<picture>
-  <img src="frontend/assets/ss.png" alt="TRIPZ-AI" width="300">
-</picture>
 
 <br />
 
