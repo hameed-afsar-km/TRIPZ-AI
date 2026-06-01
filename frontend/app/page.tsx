@@ -14,9 +14,13 @@ import {
   BrainCircuit,
   CheckCircle2,
   Loader2,
-  MessageSquare,
   Bot,
-  X
+  X,
+  Sun,
+  Moon,
+  Sunrise,
+  Clock,
+  Navigation
 } from "lucide-react";
 
 interface AgentMessage {
@@ -73,6 +77,149 @@ const isTripRelated = (text: string): boolean => {
   if (travelPatterns.test(normalized)) return true;
   return false;
 };
+
+interface DayData {
+  day: number;
+  theme: string;
+  morning?: string;
+  afternoon?: string;
+  evening?: string;
+}
+
+interface ItineraryData {
+  title?: string;
+  total_estimated_cost?: number;
+  days?: DayData[];
+}
+
+interface ItineraryBoardProps {
+  itinerary: ItineraryData | null;
+  warnings?: string[];
+  duration_ms?: number;
+}
+
+function ItineraryBoard({ itinerary, warnings, duration_ms }: ItineraryBoardProps) {
+  const days = itinerary?.days || [];
+  const dayCount = days.length;
+
+  if (dayCount === 0) return null;
+
+  return (
+    <div className="flex gap-4 w-full max-w-5xl mx-auto">
+      <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-600/20 mt-1">
+        <Bot className="w-4 h-4 text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        {/* Summary bar */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between gap-3 mb-5 px-1"
+        >
+          <div className="min-w-0">
+            <h3 className="text-base font-bold text-white truncate">{itinerary?.title || "Consensus Itinerary"}</h3>
+            <div className="flex items-center gap-2 mt-0.5">
+              <Navigation className="h-3 w-3 text-orange-500" />
+              <span className="text-zinc-500 text-xs">{dayCount} day{dayCount > 1 ? 's' : ''}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-full flex items-center gap-1.5">
+              <DollarSign className="h-3 w-3 text-orange-400" />
+              <span className="text-orange-400 font-bold text-sm">{itinerary?.total_estimated_cost || 0}</span>
+            </div>
+            {duration_ms != null && (
+              <div className="px-2.5 py-1 bg-zinc-800/60 border border-zinc-700/40 rounded-full flex items-center gap-1">
+                <Clock className="h-3 w-3 text-zinc-400" />
+                <span className="text-zinc-400 text-[10px]">{(duration_ms / 1000).toFixed(1)}s</span>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Timeline */}
+        <div className="relative">
+          {/* Vertical gradient line */}
+          <div className="absolute left-[17px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-orange-500/60 via-purple-500/40 to-transparent" />
+
+          <div className="space-y-5">
+            {days.map((day: DayData, i: number) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1, duration: 0.4, ease: "easeOut" }}
+                className="relative flex items-start gap-4"
+              >
+                {/* Timeline node */}
+                <div className="shrink-0 relative z-10 flex flex-col items-center pt-1">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all duration-300 ${
+                    i === 0
+                      ? 'bg-orange-500/20 border-orange-400/50 shadow-[0_0_12px_rgba(234,88,12,0.25)]'
+                      : i === dayCount - 1
+                        ? 'bg-purple-500/20 border-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
+                        : 'bg-zinc-800/60 border-zinc-700/50'
+                  }`}>
+                    <span className={`font-bold text-sm ${
+                      i === 0 ? 'text-orange-400' : i === dayCount - 1 ? 'text-purple-400' : 'text-zinc-300'
+                    }`}>{day.day}</span>
+                  </div>
+                </div>
+
+                {/* Day card */}
+                <div className="flex-1 min-w-0 bg-zinc-900/50 border border-zinc-800/40 rounded-2xl p-4 backdrop-blur-sm min-h-[5rem]">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <h4 className="text-white font-semibold text-sm">{day.theme}</h4>
+                    <span className="text-[10px] text-zinc-600 shrink-0 font-mono">DAY {day.day}</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {day.morning && (
+                      <div className="flex items-start gap-3">
+                        <div className="shrink-0 w-5 h-5 rounded-md bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mt-0.5">
+                          <Sunrise className="h-3 w-3 text-amber-400" />
+                        </div>
+                        <span className="text-zinc-300 text-[13px] leading-relaxed">{day.morning}</span>
+                      </div>
+                    )}
+                    {day.afternoon && (
+                      <div className="flex items-start gap-3">
+                        <div className="shrink-0 w-5 h-5 rounded-md bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mt-0.5">
+                          <Sun className="h-3 w-3 text-orange-400" />
+                        </div>
+                        <span className="text-zinc-300 text-[13px] leading-relaxed">{day.afternoon}</span>
+                      </div>
+                    )}
+                    {day.evening && (
+                      <div className="flex items-start gap-3">
+                        <div className="shrink-0 w-5 h-5 rounded-md bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mt-0.5">
+                          <Moon className="h-3 w-3 text-indigo-400" />
+                        </div>
+                        <span className="text-zinc-300 text-[13px] leading-relaxed">{day.evening}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        {warnings && warnings.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="mt-4 flex items-center gap-2 px-1"
+          >
+            <MapPin className="h-3 w-3 text-zinc-500 shrink-0" />
+            <span className="text-[10px] text-zinc-500">{warnings.join(" | ")}</span>
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -396,8 +543,8 @@ export default function Home() {
         </AnimatePresence>
       </div>
 
-      <div className="flex-1 max-w-5xl w-full mx-auto flex flex-col justify-between relative z-10 h-full p-4 md:p-6 pt-20">
-        <div className="flex-1 flex flex-col justify-center overflow-y-auto scrollbar-none py-4">
+      <div className="flex-1 max-w-5xl w-full mx-auto flex flex-col relative z-10 h-full p-4 md:p-6 pt-20">
+        <div className="flex-1 flex flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-[#333] scrollbar-track-transparent py-4 min-h-0">
           <AnimatePresence mode="wait">
             {simulationStage === "idle" && (
               <motion.div
@@ -406,7 +553,7 @@ export default function Home() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
                 transition={{ duration: 0.4 }}
-                className="flex flex-col items-center justify-center h-full pt-[8vh] space-y-6"
+                className="flex flex-col items-center justify-center min-h-full pt-[8vh] space-y-6"
               >
                 <motion.div 
                   layoutId="tripz-logo-container"
@@ -452,7 +599,7 @@ export default function Home() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
                 transition={{ duration: 0.5 }}
-                className="flex flex-col items-center justify-center h-full"
+                className="flex flex-col items-center justify-center min-h-full"
               >
                 <div className="relative flex flex-col items-center p-10 bg-white/5 border border-white/10 rounded-[2rem] shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] backdrop-blur-xl max-w-md w-full text-center">
                   <div className="absolute inset-0 bg-gradient-to-b from-orange-500/10 to-transparent rounded-[2rem] opacity-50"></div>
@@ -477,9 +624,9 @@ export default function Home() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, staggerChildren: 0.1 }}
-                className="flex flex-col justify-center items-center h-full w-full space-y-6 overflow-y-auto pr-2 pb-10"
+                className="flex flex-col items-center w-full space-y-6 pr-2 pb-10"
               >
-                <div className="flex items-center justify-center gap-6 flex-shrink-0 w-full max-w-5xl mx-auto py-4">
+                <div className="flex items-stretch justify-center gap-6 flex-shrink-0 w-full max-w-5xl mx-auto py-4">
                   {bentoAgents.map((agent, i) => {
                     const logs = simulationLogs.filter(l => l.agent === agent.name);
                     const hasError = logs.some(l => l.isError === true);
@@ -503,7 +650,7 @@ export default function Home() {
                               : isCompleted
                                 ? "border-emerald-500/30 bg-emerald-950/10 shadow-[0_0_15px_rgba(16,185,129,0.05)]"
                                 : "border-zinc-800/40 bg-zinc-950/40 opacity-60"
-                        } backdrop-blur-md h-48`}
+                        } backdrop-blur-md min-h-[8rem] h-auto`}
                       >
                         <div className="flex items-center justify-between mb-3 shrink-0">
                           <div className="flex items-center gap-2 min-w-0">
@@ -571,7 +718,7 @@ export default function Home() {
                       initial={{ opacity: 0, y: 30, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ duration: 0.6, type: "spring", bounce: 0.4 }}
-                      className="flex gap-4 mt-6 w-full max-w-2xl mx-auto"
+                      className="flex gap-4 w-full max-w-4xl mx-auto flex-shrink-0"
                     >
                       <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-red-600/20 mt-1">
                         <Bot className="w-4 h-4 text-white" />
@@ -593,49 +740,22 @@ export default function Home() {
                       initial={{ opacity: 0, y: 30, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ duration: 0.6, type: "spring", bounce: 0.4 }}
-                      className="flex gap-4 mt-6 w-full max-w-2xl mx-auto"
+                      className="w-full flex-shrink-0"
                     >
-                      <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-600/20 mt-1">
-                        <Bot className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="flex-1 bg-zinc-900/60 p-6 rounded-3xl border border-zinc-800/60 backdrop-blur-md">
-                        {itineraryResult.itinerary?.markdown ? (
-                          <div className="text-sm leading-relaxed text-zinc-300 space-y-4">
+                      {itineraryResult.itinerary?.markdown ? (
+                        <div className="flex gap-4 w-full max-w-5xl mx-auto">
+                          <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-600/20 mt-1">
+                            <Bot className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1 bg-zinc-900/60 p-6 rounded-3xl border border-zinc-800/60 backdrop-blur-md text-sm leading-relaxed text-zinc-300 space-y-2">
                             {itineraryResult.itinerary.markdown.split('\n').map((line: string, i: number) => (
                               <p key={i}>{line}</p>
                             ))}
                           </div>
-                        ) : (
-                          <div className="text-sm leading-relaxed">
-                            <h3 className="text-xl font-bold text-white mb-2">{itineraryResult.itinerary?.title || "Consensus Itinerary"}</h3>
-                            <p className="text-zinc-400 mb-6">Total Cost: ${itineraryResult.itinerary?.total_estimated_cost || 0}</p>
-                            
-                            <div className="space-y-6">
-                              {(itineraryResult.itinerary?.days || []).map((day: any, i: number) => (
-                                <div key={i} className="border-l-2 border-orange-500/30 pl-4">
-                                  <h4 className="font-bold text-white">Day {day.day}: {day.theme}</h4>
-                                  <ul className="mt-2 space-y-1 text-zinc-300">
-                                    {day.morning && <li><span className="text-orange-400 font-medium">Morning:</span> {day.morning}</li>}
-                                    {day.afternoon && <li><span className="text-orange-400 font-medium">Afternoon:</span> {day.afternoon}</li>}
-                                    {day.evening && <li><span className="text-orange-400 font-medium">Evening:</span> {day.evening}</li>}
-                                  </ul>
-                                </div>
-                              ))}
-                            </div>
-
-                            {itineraryResult.warnings && itineraryResult.warnings.length > 0 && (
-                              <div className="mt-4 pt-4 border-t border-zinc-800/50">
-                                <p className="text-xs text-zinc-500">Warnings: {itineraryResult.warnings.join(" | ")}</p>
-                              </div>
-                            )}
-                            {itineraryResult.duration_ms && (
-                              <div className="mt-2 text-[10px] text-zinc-600">
-                                Generated in {(itineraryResult.duration_ms / 1000).toFixed(1)}s
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <ItineraryBoard itinerary={itineraryResult.itinerary} warnings={itineraryResult.warnings} duration_ms={itineraryResult.duration_ms} />
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>

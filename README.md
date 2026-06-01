@@ -6,27 +6,32 @@
 Powered by LangGraph · FastAPI · Next.js
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=flat-square&logo=python&logoColor=white)]()
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688?style=flat-square&logo=fastapi&logoColor=white)]()
-[![Next.js](https://img.shields.io/badge/Next.js-16.2.6-000000?style=flat-square&logo=next.js&logoColor=white)]()
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.2+-1C3C3C?style=flat-square&logo=langchain&logoColor=white)]()
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)]()
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)]()
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)]()
+[![Framer Motion](https://img.shields.io/badge/Framer_Motion-11-EA4C89?style=flat-square&logo=framer&logoColor=white)]()
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.2+-1C3C3C?style=flat-square&logo=langchain&logoColor=white)]()
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688?style=flat-square&logo=fastapi&logoColor=white)]()
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)]()
+[![Ollama](https://img.shields.io/badge/Ollama-local-000000?style=flat-square&logo=ollama&logoColor=white)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)]()
 
-> "Your personal AI travel agent — just describe your dream trip, and let the agents handle the rest."
+> *"Your personal AI travel agent — just describe your dream trip, and let the agents handle the rest."*
 
-[✨ Features](#-features) •
-[🏗️ Architecture](#️-architecture) •
-[⚡ Quick Start](#-quick-start) •
-[🧠 How It Works](#-how-it-works) •
-[🔧 Configuration](#-configuration)
+[✨ Features](#-features) · [🏗️ Architecture](#️-architecture) · [⚡ Quick Start](#-quick-start) · [🧠 How It Works](#-how-it-works) · [🔧 Configuration](#-configuration)
 
 <br />
 
-<img src="https://raw.githubusercontent.com/hameed-afsar-km/TRIPZ-AI/master/frontend/public/vercel.svg" alt="TRIPZ-AI Banner" width="120" style="border-radius: 16px;" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/TRIPZ·AI-000000?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgOWwxMi03IDUgMyAxMi03Ii8+PHBhdGggZD0iTTkgMjJsLTUtNyIvPjxwYXRoIGQ9Im05IDUgNyA0IDItM004IDE0bDItMiIvPjxwYXRoIGQ9Ik0xMiAyMnYtOCIvPjwvc3ZnPg==">
+  <img src="https://img.shields.io/badge/TRIPZ·AI-000000?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgOWwxMi03IDUgMyAxMi03Ii8+PHBhdGggZD0iTTkgMjJsLTUtNyIvPjxwYXRoIGQ9Im05IDUgNyA0IDItM008IDE0bDItMiIvPjxwYXRoIGQ9Ik0xMiAyMnYtOCIvPjwvc3ZnPg==" alt="TRIPZ-AI" width="160">
+</picture>
 
 <br />
+
+[![GitHub stars](https://img.shields.io/github/stars/hameed-afsar-km/TRIPZ-AI?style=social)](https://github.com/hameed-afsar-km/TRIPZ-AI)
+[![GitHub last commit](https://img.shields.io/github/last-commit/hameed-afsar-km/TRIPZ-AI?style=social)](https://github.com/hameed-afsar-km/TRIPZ-AI)
 
 </div>
 
@@ -102,7 +107,7 @@ Powered by LangGraph · FastAPI · Next.js
 ```
 
 <p align="center">
-  <em>Built with <a href="https://langchain-ai.github.io/langgraph/">LangGraph StateGraph</a> — 
+  <em>Built with <a href="https://langchain-ai.github.io/langgraph/">LangGraph StateGraph</a> —
   deterministic nodes (budget, transit, curator) run in parallel, AI nodes stream tokens via SSE.</em>
 </p>
 
@@ -110,50 +115,45 @@ Powered by LangGraph · FastAPI · Next.js
 
 ## ⚡ Quick Start
 
+> **⚠️ Note:** This repo contains the frontend. The backend lives in the [`backend/`](backend/) directory and must be set up separately (see below).
+
 ### Prerequisites
 
-- **Python 3.13+**
 - **Node.js 20+**
+- **Python 3.13+** (for backend)
 - **Ollama** (for local LLM) → [Install Ollama](https://ollama.com/)
 
-### 1. Clone & Install Backend
+### Frontend (this repo)
 
 ```bash
 git clone https://github.com/hameed-afsar-km/TRIPZ-AI.git
-cd TRIPZ-AI/backend
+cd TRIPZ-AI
+
+npm install
+npm run dev        # starts on http://localhost:3000
+```
+
+### Backend (local only)
+
+```bash
+# From the project root
+cd backend
 
 python -m venv .venv
 .venv\Scripts\activate      # Windows
 # source .venv/bin/activate  # macOS / Linux
 
 pip install -r requirements.txt
-```
 
-### 2. Start Ollama
-
-```bash
 ollama serve
-ollama pull qwen2.5:1.5b     # default model (lightweight)
-# or: ollama pull gemma2:2b  # alternative
-```
+ollama pull qwen2.5:1.5b    # default model (lightweight)
 
-### 3. Run the Backend
-
-```bash
 uvicorn main:app --reload --port 8000
-```
-
-### 4. Install & Run Frontend
-
-```bash
-cd ../frontend
-npm install
-npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) 🚀
 
-> **Note:** The frontend proxies `/api/v1/*` to the backend at `localhost:8000` via Next.js rewrites.
+> The frontend proxies `/api/v1/*` to the backend at `localhost:8000` via Next.js rewrites.
 
 ---
 
@@ -195,18 +195,12 @@ Open [http://localhost:3000](http://localhost:3000) 🚀
 
 ## 🔧 Configuration
 
-### Environment Variables
-
-No `.env` file required. All configuration is handled at runtime:
-
-- LLM provider & API keys → frontend settings modal
-- Default model → `backend/main.py` (Ollama with `qwen2.5:1.5b`)
-- CORS origins → `backend/main.py` (`localhost:3000`, `localhost:3001`)
-- Session TTL → `backend/memory/session_memory.py` (default: 30 min)
-
-### Frontend Proxy
-
-`frontend/next.config.ts` rewrites `/api/v1/:path*` → `http://localhost:8000/api/v1/:path*`
+| Setting | Location | Default |
+|---------|----------|---------|
+| LLM provider & API keys | Frontend settings modal (localStorage) | Ollama (`qwen2.5:1.5b`) |
+| CORS origins | `backend/main.py` | `localhost:3000`, `localhost:3001` |
+| Session TTL | `backend/memory/session_memory.py` | 30 min |
+| API proxy | `next.config.ts` | `localhost:8000` |
 
 ---
 
@@ -214,22 +208,31 @@ No `.env` file required. All configuration is handled at runtime:
 
 ```
 TRIPZ-AI/
-├── backend/                        # FastAPI + LangGraph
+├── app/                            # Next.js App Router pages
+│   ├── layout.tsx                  # Root layout (metadata, fonts, dark bg)
+│   ├── page.tsx                    # Main app page (808 lines)
+│   └── globals.css                 # Tailwind v4 imports + custom animations
+├── components/
+│   └── ui/
+│       ├── ai-prompt-box.tsx       # Rich text input + settings modal (818 lines)
+│       ├── history-sidebar.tsx     # Left sidebar for past trips
+│       ├── shooting-stars-overlay.tsx  # Animated background effect
+│       └── demo.tsx                # Standalone demo component
+├── public/                         # Static assets (bg.jpeg, icons)
+├── backend/                        # FastAPI + LangGraph (local only)
 │   ├── main.py                     # Entry point (port 8000)
-│   ├── requirements.txt
-│   ├── agents/                     # AI agent nodes
-│   ├── api/                        # REST routers
-│   ├── graphs/                     # LangGraph assembly
+│   ├── agents/                     # AI agent nodes (×8)
+│   ├── api/                        # REST routers (trip, sessions, health)
+│   ├── graphs/                     # LangGraph StateGraph assembly
 │   ├── models/                     # TripState TypedDict
-│   ├── services/                   # LLM service layer
-│   ├── tools/                      # Deterministic tools
-│   └── memory/                     # Session store
-├── frontend/                       # Next.js 16 app
-│   ├── app/                        # Pages & layout
-│   ├── components/                 # UI components
-│   └── public/                     # Static assets
+│   ├── services/                   # Unified LLM service layer
+│   ├── tools/                      # Weather, hotel, transport, activity tools
+│   └── memory/                     # Session store (in-memory, TTL)
 ├── test_*.py                       # 6 test scripts
-└── FIX_REPORT.md                   # Bug fix documentation
+├── FIX_REPORT.md                   # Bug fix documentation
+├── next.config.ts                  # Next.js config (API rewrites)
+├── package.json                    # Dependencies & scripts
+└── tsconfig.json                   # TypeScript config
 ```
 
 ---
@@ -237,7 +240,7 @@ TRIPZ-AI/
 ## 🧪 Testing
 
 ```bash
-# From project root:
+# From project root (requires backend setup):
 python test_supervisor.py      # AI input parsing
 python test_routing.py         # Workflow classification
 python test_graph.py           # Full graph execution
@@ -250,6 +253,7 @@ python test_input_parsing.py   # End-to-end parsing
 
 ## 🚀 Roadmap
 
+- [ ] Commit backend to GitHub
 - [ ] **Redis** session store for production
 - [ ] **Real APIs** (Amadeus, Booking.com, Google Places)
 - [ ] **User auth** + saved itineraries
