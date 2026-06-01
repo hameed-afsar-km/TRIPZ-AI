@@ -24,8 +24,7 @@ Powered by LangGraph · FastAPI · Next.js
 <br />
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/TRIPZ·AI-000000?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgOWwxMi03IDUgMyAxMi03Ii8+PHBhdGggZD0iTTkgMjJsLTUtNyIvPjxwYXRoIGQ9Im05IDUgNyA0IDItM004IDE0bDItMiIvPjxwYXRoIGQ9Ik0xMiAyMnYtOCIvPjwvc3ZnPg==">
-  <img src="/frontend/assets/ss.png" alt="TRIPZ-AI" width="300">
+  <img src="frontend/assets/ss.png" alt="TRIPZ-AI" width="300">
 </picture>
 
 <br />
