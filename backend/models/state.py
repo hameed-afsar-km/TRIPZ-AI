@@ -10,6 +10,7 @@ class TripState(TypedDict, total=False):
     destination: str
     origin: str
     travel_dates: Dict[str, str]
+    duration_days: int
     num_travelers: int
     preferences: List[str]
     previous_context: Optional[Dict[str, Any]]
