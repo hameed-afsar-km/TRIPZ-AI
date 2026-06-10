@@ -157,6 +157,7 @@ async def plan_trip_stream(request: TripRequest):
                         _SKIP_NAMES = {
                             "LangGraph", "__start__",
                             "route_after_supervisor",  # conditional edge fn
+                            "route_after_critic",      # conditional edge fn
                             "clarify_node",             # terminal, shown via done event
                         }
 
@@ -179,7 +180,9 @@ async def plan_trip_stream(request: TripRequest):
                                 "duration_sec": round(duration, 1),
                             })
                             if output:
-                                last_state = output
+                                if last_state is None:
+                                    last_state = {}
+                                last_state.update(output)
 
                         elif kind == "on_chain_error" and name not in _SKIP_NAMES:
                             error_data = event.get("data", {})
