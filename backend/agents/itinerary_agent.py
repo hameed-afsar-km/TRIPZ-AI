@@ -17,20 +17,22 @@ Activities: {activities}
 Weather: {weather_summary}
 
 {replan_context}
-Rules:
-- Stay within budget or close to it (unless budget is unlimited)
-- Avoid outdoor activities on bad weather days
-- Day 1: arrival and evening exploration
-- Last day: departure
-- Fill all {num_days} days with activities
-- EVERY day MUST use specific named activities from the Activities list — NEVER use generic phrases like "Relax at the hotel", "Explore the city", "Visit local attractions", "Enjoy a nice dinner"
-- Each day must have UNIQUE activities — never repeat the same morning/afternoon/evening text across different days
-- Include variety across days (don't repeat the same theme)
-- IMPORTANT: Use the EXACT prices from Hotels and Activities above. Do NOT guess or modify prices.
+STRICT RULES:
+1. Stay within budget or close to it (unless budget is unlimited)
+2. Avoid outdoor activities on bad weather days
+3. Day 1: arrival and evening exploration
+4. Last day: departure with morning activity
+5. Fill all {num_days} days — each day MUST have specific named venues from the Activities list
+6. NEVER use generic phrases like "Relax at the hotel", "Explore the city", "Visit local attractions", "Enjoy a nice dinner", "Sightseeing", "Shopping". Use ONLY the EXACT activity names from the list.
+7. Each day must have UNIQUE content — never repeat the same morning/afternoon/evening across different days
+8. Include variety: don't repeat the same theme on consecutive days; mix culture, food, adventure, relaxation, sightseeing
+9. For morning/afternoon/evening use format: "Activity Name (Venue Name)" — include the venue or location
+10. Use the EXACT prices from Hotels and Activities above. Do NOT guess or modify prices.
+11. Include a budget_tip for each day with a specific money-saving suggestion for {destination}
 
 Return JSON:
 {{"title":"","summary":"","days":[
-{{"day":1,"theme":"","morning":"","afternoon":"","evening":"","estimated_cost":0}}
+{{"day":1,"theme":"","morning":"","afternoon":"","evening":"","estimated_cost":0,"budget_tip":""}}
 ], "total_estimated_cost":0, "tips":[]}}"""
 
 
@@ -38,7 +40,16 @@ def _trunc(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
-_SLOT_THEMES = ["Explore the City", "Cultural Immersion", "Adventure & Nature", "Food & Relaxation", "Local Experience"]
+_SLOT_THEMES = [
+    "Arrival & City Orientation",
+    "Cultural Immersion & Heritage",
+    "Adventure & Outdoor Exploration",
+    "Food, Markets & Local Life",
+    "Iconic Landmarks & Sightseeing",
+    "Relaxation & Wellness",
+    "Shopping & Entertainment",
+    "Day Trip & Beyond",
+]
 
 
 async def _recalculate_costs(
@@ -94,6 +105,7 @@ async def _recalculate_costs(
             "afternoon": afternoon,
             "evening": evening,
             "estimated_cost": round(day_cost, 2),
+            "budget_tip": d.get("budget_tip", ""),
         })
         total_cost += day_cost
 
@@ -148,6 +160,7 @@ async def _generate_fallback_itinerary(
         act_list.append(converted_a)
 
     acts_per_day = max(len(act_list) // max(num_days, 1), 1)
+    daily_budget = budget / num_days if budget < 999999 else 0
 
     for d in range(1, num_days + 1):
         day_acts = act_list[(d - 1) * acts_per_day : d * acts_per_day] if act_list else []
@@ -188,6 +201,11 @@ async def _generate_fallback_itinerary(
                 afternoon = f"Visit {destination} attractions"
                 evening = f"Dinner in {destination}"
 
+        if daily_budget > 0:
+            budget_tip = f"Daily budget: ~{currency} {daily_budget:,.0f}. Meals ~{currency} {daily_budget*0.3:,.0f}, entry fees ~{currency} {daily_budget*0.2:,.0f}."
+        else:
+            budget_tip = f"Budget accordingly for meals, transport, and entry fees."
+
         days.append({
             "day": d,
             "theme": _SLOT_THEMES[theme_idx],
@@ -195,17 +213,21 @@ async def _generate_fallback_itinerary(
             "afternoon": afternoon,
             "evening": evening,
             "estimated_cost": round(day_cost, 2),
+            "budget_tip": budget_tip,
         })
 
-    tip = "This itinerary was generated from available travel data. For a more refined plan, ensure the LLM provider is accessible."
-    tips = [tip]
-    if preferences:
-        tips.append(f"Preferences included: {', '.join(preferences)}")
+    tips = [
+        f"Daily meals budget: allocate ~{currency} {daily_budget*0.3:,.0f} per day (~10% of daily budget) for breakfast, lunch, and dinner at {destination}." if daily_budget > 0 else f"Pack snacks and water for long exploration days.",
+        f"Top attraction tickets often save money when booked online in advance — check official {destination} tourism websites.",
+        f"Public transport or ride-sharing is usually cheaper than taxis for getting around {destination}.",
+        f"Preferences included: {', '.join(preferences)}" if preferences else f"Staying at {hotel_name} — check if they offer complimentary breakfast to save on meals.",
+    ]
 
     return {
         "title": f"{num_days}-Day Trip to {destination}",
-        "summary": f"A {num_days}-day trip to {destination} organized from your travel data. "
-                   f"Total estimated cost: ~{currency} {total_cost:,.2f}.",
+        "summary": f"A {num_days}-day trip to {destination} from {origin}. "
+                   f"Total estimated cost: ~{currency} {total_cost:,.2f}. "
+                   f"Accommodation at {hotel_name}.",
         "days": days,
         "total_estimated_cost": round(total_cost, 2),
         "tips": tips,
@@ -217,7 +239,7 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     prev = state.get("previous_context", {})
     if prev and prev.get("days") and prev.get("destination") == state.get("destination"):
-        return {"itinerary": prev, "execution_trace": ["itinerary_agent:from_context"]}
+        return {**state, "itinerary": prev, "execution_trace": state.get("execution_trace", []) + ["itinerary_agent:from_context"]}
 
     hotels = state.get("hotels", [])
     activities = state.get("activities", [])
@@ -263,9 +285,10 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         timeout=150,
     )
 
+    trace = state.get("execution_trace", [])
     if isinstance(itinerary, dict) and "error" not in itinerary:
         itinerary = await _recalculate_costs(itinerary, hotels, activities, currency, num_days)
-        result: Dict[str, Any] = {"itinerary": itinerary, "execution_trace": ["itinerary_agent"]}
+        result: Dict[str, Any] = {**state, "itinerary": itinerary, "execution_trace": trace + ["itinerary_agent"]}
     else:
         fallback = await _generate_fallback_itinerary(
             num_days=num_days,
@@ -279,8 +302,9 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             weather=weather,
         )
         result = {
+            **state,
             "itinerary": fallback,
             "warnings": [f"LLM synthesis failed ({itinerary.get('error', 'unknown')}). Using template-based itinerary."],
-            "execution_trace": ["itinerary_agent:fallback"],
+            "execution_trace": trace + ["itinerary_agent:fallback"],
         }
     return result

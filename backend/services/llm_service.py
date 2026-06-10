@@ -163,6 +163,39 @@ def _extract_json(text: str) -> str:
     return cleaned
 
 
+def _try_fix_json(raw: str) -> str:
+    obj_depth = 0
+    start = -1
+    end = -1
+    for i, ch in enumerate(raw):
+        if ch == '{':
+            if obj_depth == 0:
+                start = i
+            obj_depth += 1
+        elif ch == '}':
+            obj_depth -= 1
+            if obj_depth == 0 and start != -1:
+                end = i + 1
+                break
+            if obj_depth < 0:
+                break
+    if start != -1 and end != -1:
+        raw = raw[start:end]
+    elif start != -1 and end == -1:
+        raw = raw[start:]
+    raw = raw.strip()
+    raw = re.sub(r',\s*}', '}', raw)
+    raw = re.sub(r',\s*]', ']', raw)
+    raw = re.sub(r"(?<!\\)'", '"', raw)
+
+    def _fix_keys(m: re.Match) -> str:
+        return f'"{m.group(1)}":'
+
+    raw = re.sub(r'(?<=[{,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', _fix_keys, raw)
+
+    return raw
+
+
 # ── JSON-targeted call with exponential backoff retries ───────────────────
 async def call_llm_json(
     role: str,
@@ -188,7 +221,11 @@ async def call_llm_json(
                 timeout=timeout,
             )
             last_raw = raw
-            return json.loads(raw)
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                fixed = _try_fix_json(raw)
+                return json.loads(fixed)
         except (json.JSONDecodeError, ValueError) as e:
             if attempt == retries:
                 return {"error": f"JSON parse failed after {retries+1} attempts: {str(e)}", "raw": last_raw}

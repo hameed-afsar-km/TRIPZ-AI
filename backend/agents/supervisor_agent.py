@@ -30,15 +30,17 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     user_request = state.get("user_request", "")
     if not user_request:
         return {
+            **state,
             "error": "No user request provided",
             "duration_days": 7,
-            "execution_trace": ["supervisor_agent:error"],
+            "execution_trace": state.get("execution_trace", []) + ["supervisor_agent:error"],
         }
 
     # If we have previous context, seed the parse faster
     prev_context = state.get("previous_context", {})
     if prev_context and prev_context.get("destination"):
         return {
+            **state,
             "destination":    prev_context.get("destination", "Unknown"),
             "origin":         prev_context.get("origin", "Unknown"),
             "travel_dates":   prev_context.get("travel_dates", {}),
@@ -48,9 +50,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "currency":       prev_context.get("currency", "USD"),
             "preferences":    prev_context.get("preferences", []),
             "confidence_score": 0.9,
-            "provider":       state.get("provider", "ollama"),
-            "api_key":        state.get("api_key"),
-            "execution_trace": ["supervisor_agent:from_context"],
+            "execution_trace": state.get("execution_trace", []) + ["supervisor_agent:from_context"],
         }
 
     prompt = SUPERVISOR_PROMPT_TEMPLATE.format(request=user_request)
@@ -125,6 +125,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         end_date = start_date + timedelta(days=max(fallback_duration - 1, 0))
 
         return {
+            **state,
             "destination": fallback_dest,
             "origin": fallback_origin,
             "travel_dates": {
@@ -136,10 +137,8 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "num_travelers": 1,
             "preferences": fallback_preferences,
             "currency": fallback_currency,
-            "provider":  state.get("provider", "ollama"),
-            "api_key":   state.get("api_key"),
             "warnings": ["Supervisor JSON parsing failed — using regex fallback. Results may be incomplete."],
-            "execution_trace": ["supervisor_agent:fallback"],
+            "execution_trace": state.get("execution_trace", []) + ["supervisor_agent:fallback"],
         }
 
     # Calculate dates from duration if not provided
@@ -160,6 +159,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         budget = 999999.0
     
     return {
+        **state,
         "destination":    parsed.get("destination", "Unknown"),
         "origin":         parsed.get("origin", "Unknown"),
         "travel_dates":   travel_dates,
@@ -169,7 +169,5 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         "currency":       parsed.get("currency", "USD"),
         "preferences":    parsed.get("preferences", []),
         "confidence_score": float(parsed.get("confidence", 0.5)),
-        "provider":       state.get("provider", "ollama"),
-        "api_key":        state.get("api_key"),
-        "execution_trace": ["supervisor_agent"],
+        "execution_trace": state.get("execution_trace", []) + ["supervisor_agent"],
     }

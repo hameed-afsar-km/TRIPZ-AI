@@ -56,6 +56,7 @@ def route_after_critic(state: TripState) -> Literal["itinerary_agent", "__end__"
 
 def clarify_node(state: TripState) -> TripState:
     return {
+        **state,
         "itinerary": {
             "error": "clarification_needed",
             "message": (
@@ -63,7 +64,7 @@ def clarify_node(state: TripState) -> TripState:
                 "Please provide: destination, approximate dates, budget, and number of travelers."
             ),
         },
-        "execution_trace": ["clarify_node"],
+        "execution_trace": state.get("execution_trace", []) + ["clarify_node"],
     }
 
 

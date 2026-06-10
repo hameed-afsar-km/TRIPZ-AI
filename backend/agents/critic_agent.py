@@ -36,9 +36,10 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     itinerary = state.get("itinerary", {})
     if not itinerary or "error" in itinerary:
         return {
+            **state,
             "replan_instructions": "",
             "needs_replanning": False,
-            "execution_trace": ["critic_agent:skip"],
+            "execution_trace": state.get("execution_trace", []) + ["critic_agent:skip"],
         }
 
     destination = state.get("destination", "Unknown")
@@ -50,9 +51,10 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     replan_count = state.get("replan_count", 0)
     if replan_count >= 2:
         return {
+            **state,
             "replan_instructions": "",
             "needs_replanning": False,
-            "execution_trace": ["critic_agent:max_replan"],
+            "execution_trace": state.get("execution_trace", []) + ["critic_agent:max_replan"],
         }
 
     prompt = CRITIC_PROMPT_TEMPLATE.format(
@@ -75,17 +77,20 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     if "error" in result:
         return {
+            **state,
             "replan_instructions": "",
             "needs_replanning": False,
-            "execution_trace": ["critic_agent:error"],
+            "execution_trace": state.get("execution_trace", []) + ["critic_agent:error"],
         }
 
     needs_replan = result.get("needs_replanning", False)
     feedback = result.get("feedback", "")
+    trace = state.get("execution_trace", [])
 
     return {
+        **state,
         "replan_instructions": feedback,
         "needs_replanning": needs_replan,
         "replan_count": replan_count + 1,
-        "execution_trace": ["critic_agent"],
+        "execution_trace": trace + ["critic_agent"],
     }

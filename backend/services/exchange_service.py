@@ -57,6 +57,7 @@ async def fetch_live_rates() -> Dict[str, float]:
 
 
 async def get_exchange_rate(target_currency: str) -> float:
+    global _cache_time
     target = target_currency.upper().strip()
     if target == "USD":
         return 1.0

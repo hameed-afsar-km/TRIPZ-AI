@@ -60,11 +60,13 @@ async def routing_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     if "error" in result:
         return {
+            **state,
             "routing_decision": "standard",
-            "execution_trace": ["routing_agent:fallback"],
+            "execution_trace": state.get("execution_trace", []) + ["routing_agent:fallback"],
         }
 
     return {
+        **state,
         "routing_decision": result.get("trip_type", "standard"),
-        "execution_trace": ["routing_agent"],
+        "execution_trace": state.get("execution_trace", []) + ["routing_agent"],
     }
