@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🧳 TRIPZ·AI
+<picture>
+  <img src="frontend/assets/logo.png" alt="TRIPZ-AI" width="700">
+</picture>
 
 **Multi-Agent AI Travel Operating System**  
 Powered by LangGraph · FastAPI · Next.js
@@ -22,11 +24,6 @@ Powered by LangGraph · FastAPI · Next.js
 [✨ Features](#-features) · [🏗️ Architecture](#️-architecture) · [⚡ Quick Start](#-quick-start) · [🧠 How It Works](#-how-it-works) · [🔧 Configuration](#-configuration)
 
 <br />
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/TRIPZ·AI-000000?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgOWwxMi03IDUgMyAxMi03Ii8+PHBhdGggZD0iTTkgMjJsLTUtNyIvPjxwYXRoIGQ9Im05IDUgNyA0IDItM004IDE0bDItMiIvPjxwYXRoIGQ9Ik0xMiAyMnYtOCIvPjwvc3ZnPg==">
-  <img src="https://img.shields.io/badge/TRIPZ·AI-000000?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTMgOWwxMi03IDUgMyAxMi03Ii8+PHBhdGggZD0iTTkgMjJsLTUtNyIvPjxwYXRoIGQ9Im05IDUgNyA0IDItM008IDE0bDItMiIvPjxwYXRoIGQ9Ik0xMiAyMnYtOCIvPjwvc3ZnPg==" alt="TRIPZ-AI" width="160">
-</picture>
 
 <br />
 
