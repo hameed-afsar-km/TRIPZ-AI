@@ -1,11 +1,15 @@
 import json
 from typing import Any, Dict, List
 from services.llm_service import call_llm_json
+from services.exchange_service import convert_price
+
 
 ITINERARY_SYSTEM = "You are a travel planner. Output ONLY valid JSON."
 
 ITINERARY_PROMPT_TEMPLATE = """Plan a {num_days}-day trip to {destination} from {origin}.
 Trip style: {trip_type}. Budget: {currency} {budget}. Preferences: {preferences}.
+
+All prices below are ALREADY in {currency} — use them EXACTLY as shown.
 
 Hotels: {hotels}
 Transport: {transport}
@@ -21,9 +25,8 @@ Rules:
 - Fill all {num_days} days with activities
 - EVERY day MUST use specific named activities from the Activities list — NEVER use generic phrases like "Relax at the hotel", "Explore the city", "Visit local attractions", "Enjoy a nice dinner"
 - Each day must have UNIQUE activities — never repeat the same morning/afternoon/evening text across different days
-- Be specific: name actual landmarks, restaurants, beaches, museums, parks, malls
-- All prices MUST be in {currency}
 - Include variety across days (don't repeat the same theme)
+- IMPORTANT: Use the EXACT prices from Hotels and Activities above. Do NOT guess or modify prices.
 
 Return JSON:
 {{"title":"","summary":"","days":[
@@ -38,7 +41,90 @@ def _trunc(text: str, limit: int) -> str:
 _SLOT_THEMES = ["Explore the City", "Cultural Immersion", "Adventure & Nature", "Food & Relaxation", "Local Experience"]
 
 
-def _generate_fallback_itinerary(
+async def _recalculate_costs(
+    itinerary: Dict[str, Any],
+    hotels: List[Dict],
+    activities: List[Dict],
+    currency: str,
+    num_days: int,
+) -> Dict[str, Any]:
+    days = itinerary.get("days", [])
+    recalculated_days = []
+    total_cost = 0.0
+
+    hotel_cost_per_night = 0.0
+    if hotels:
+        hotel_cost_per_night = await convert_price(hotels[0].get("price_per_night", 0), currency)
+
+    activity_name_to_cost: Dict[str, float] = {}
+    for a in activities:
+        name = a.get("name", "")
+        cost_usd = a.get("cost", 0) or 0
+        activity_name_to_cost[name.lower().strip()] = await convert_price(float(cost_usd), currency)
+
+    for d in days:
+        day_num = d.get("day", 1)
+        morning = d.get("morning", "")
+        afternoon = d.get("afternoon", "")
+        evening = d.get("evening", "")
+
+        def _match_cost(text: str) -> float:
+            if not text:
+                return 0.0
+            text_lower = text.lower().strip()
+            for act_name, cost in activity_name_to_cost.items():
+                if act_name in text_lower or text_lower in act_name:
+                    return cost
+            return 0.0
+
+        morning_cost = _match_cost(morning)
+        afternoon_cost = _match_cost(afternoon)
+        evening_cost = _match_cost(evening)
+
+        day_activities_cost = max(morning_cost, afternoon_cost, evening_cost)
+
+        day_cost = day_activities_cost
+        if day_num != num_days:
+            day_cost += hotel_cost_per_night
+
+        recalculated_days.append({
+            "day": day_num,
+            "theme": d.get("theme", ""),
+            "morning": morning,
+            "afternoon": afternoon,
+            "evening": evening,
+            "estimated_cost": round(day_cost, 2),
+        })
+        total_cost += day_cost
+
+    return {
+        **itinerary,
+        "days": recalculated_days,
+        "total_estimated_cost": round(total_cost, 2),
+    }
+
+
+async def _convert_hotel_prices(hotels: List[Dict], currency: str) -> List[Dict]:
+    converted = []
+    for h in hotels:
+        h = {**h}
+        if "price_per_night" in h:
+            h["price_per_night"] = await convert_price(h["price_per_night"], currency)
+        converted.append(h)
+    return converted
+
+
+async def _convert_activity_prices(activities: List[Dict], currency: str) -> List[Dict]:
+    converted = []
+    for a in activities:
+        a = {**a}
+        if "cost" in a:
+            a["cost"] = await convert_price(a["cost"], currency)
+        converted.append(a)
+    return converted
+
+
+async def _generate_fallback_itinerary(
     num_days: int,
     destination: str,
     origin: str,
@@ -52,14 +138,24 @@ def _generate_fallback_itinerary(
     days: List[Dict] = []
     total_cost = 0
     hotel_name = hotels[0].get("name", "Selected Hotel") if hotels else "TBD"
+    hotel_price = await convert_price(hotels[0].get("price_per_night", 0), currency) if hotels else 0
 
-    act_list = activities[:]
+    act_list = []
+    for a in activities:
+        converted_a = {**a}
+        if "cost" in converted_a:
+            converted_a["cost"] = await convert_price(converted_a["cost"], currency)
+        act_list.append(converted_a)
+
     acts_per_day = max(len(act_list) // max(num_days, 1), 1)
 
     for d in range(1, num_days + 1):
         day_acts = act_list[(d - 1) * acts_per_day : d * acts_per_day] if act_list else []
         theme_idx = (d - 1) % len(_SLOT_THEMES)
-        day_cost = sum(a.get("cost", 0) or 0 for a in day_acts)
+
+        act_cost = sum(a.get("cost", 0) or 0 for a in day_acts)
+        night_cost = hotel_price if d != num_days else 0
+        day_cost = act_cost + night_cost
         total_cost += day_cost
 
         morning = ""
@@ -98,7 +194,7 @@ def _generate_fallback_itinerary(
             "morning": morning,
             "afternoon": afternoon,
             "evening": evening,
-            "estimated_cost": day_cost,
+            "estimated_cost": round(day_cost, 2),
         })
 
     tip = "This itinerary was generated from available travel data. For a more refined plan, ensure the LLM provider is accessible."
@@ -109,9 +205,9 @@ def _generate_fallback_itinerary(
     return {
         "title": f"{num_days}-Day Trip to {destination}",
         "summary": f"A {num_days}-day trip to {destination} organized from your travel data. "
-                   f"Total estimated cost: ~{currency} {total_cost:,}.",
+                   f"Total estimated cost: ~{currency} {total_cost:,.2f}.",
         "days": days,
-        "total_estimated_cost": total_cost,
+        "total_estimated_cost": round(total_cost, 2),
         "tips": tips,
     }
 
@@ -128,8 +224,8 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     weather = state.get("weather", {})
 
     budget = state.get("budget", 3000)
-    budget_display = f"{budget:,.0f}" if budget < 999999 else "Unlimited"
     currency = state.get("currency", "USD")
+    budget_display = f"{budget:,.0f}" if budget < 999999 else "Unlimited"
     origin = state.get("origin", "Unknown")
     destination = state.get("destination", "Unknown")
     preferences = state.get("preferences", [])
@@ -140,6 +236,9 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     if replan_instructions:
         replan_context = f"Replan feedback from a reviewer:\n{replan_instructions}\n\nPlease fix ALL issues listed above."
 
+    converted_hotels = await _convert_hotel_prices(hotels, currency)
+    converted_activities = await _convert_activity_prices(activities, currency)
+
     prompt = ITINERARY_PROMPT_TEMPLATE.format(
         num_days=num_days,
         destination=destination,
@@ -148,9 +247,9 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         budget=budget_display,
         currency=currency,
         preferences=", ".join(preferences) or "general",
-        hotels=_trunc(json.dumps([{k: h[k] for k in ("name","price_per_night","stars","rating") if k in h} for h in hotels[:2]]), 300),
+        hotels=_trunc(json.dumps([{k: h[k] for k in ("name","price_per_night","stars","rating") if k in h} for h in converted_hotels[:2]]), 300),
         transport=_trunc(json.dumps(state.get("transport", {}).get("recommended", {})), 200),
-        activities=_trunc(json.dumps([{k: a[k] for k in ("name","cost","indoor","category","description") if k in a} for a in activities[:12]]), 1000),
+        activities=_trunc(json.dumps([{k: a[k] for k in ("name","cost","indoor","category","description") if k in a} for a in converted_activities[:12]]), 1000),
         weather_summary=_trunc(json.dumps([{"date":d.get("date"),"condition":d.get("condition"),"temp":d.get("temp_max_c")} for d in weather.get("forecast",[])[:3]]), 300),
         replan_context=replan_context,
     )
@@ -164,9 +263,11 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         timeout=150,
     )
 
-    result: Dict[str, Any] = {"itinerary": itinerary, "execution_trace": ["itinerary_agent"]}
-    if isinstance(itinerary, dict) and "error" in itinerary:
-        fallback = _generate_fallback_itinerary(
+    if isinstance(itinerary, dict) and "error" not in itinerary:
+        itinerary = await _recalculate_costs(itinerary, hotels, activities, currency, num_days)
+        result: Dict[str, Any] = {"itinerary": itinerary, "execution_trace": ["itinerary_agent"]}
+    else:
+        fallback = await _generate_fallback_itinerary(
             num_days=num_days,
             destination=destination,
             origin=origin,
