@@ -1,73 +1,70 @@
-"""
-Routing Agent — AI Call #2 of ~4.
-Decides conditional branching AFTER the supervisor has parsed the request.
-Uses gemma2:2b — ultra-fast single-token decision.
-"""
-
 from typing import Any, Dict
-from services.llm_service import call_llm
+from services.llm_service import call_llm_json
 
-ROUTING_SYSTEM = "You are a routing classifier. Output ONE word only. No explanation."
+ROUTING_SYSTEM = """You are a travel request classifier.
+Analyze the extracted trip details and determine the optimal travel style.
+Output ONLY valid JSON, no other text."""
 
-ROUTING_PROMPT_TEMPLATE = """Given this travel context, which workflow path is best?
-
+ROUTING_PROMPT_TEMPLATE = """Trip request: "{request}"
 Destination: {destination}
-Budget: ${budget}
-Travelers: {travelers}
+Origin: {origin}
+Budget: {currency} {budget}
+Duration: {duration_days} days
+Travelers: {num_travelers}
 Preferences: {preferences}
-Confidence score: {confidence}
 
-Options:
-- "standard"   → Normal full workflow (most cases)
-- "budget"     → Very tight budget, skip luxury options
-- "luxury"     → High budget, skip budget filters  
-- "replan"     → Ambiguous/incomplete request needs clarification
+Classify into ONE travel style:
+- "standard": balanced mix of activities, mid-range accommodations
+- "budget": cost-conscious, affordable options, free activities
+- "luxury": premium experiences, fine dining, high-end hotels
 
-Output ONE word:"""
+Return JSON:
+{{"trip_type":"standard","focus_areas":["culture"],"vibe":"relaxed"}}
+
+- trip_type: one of standard/budget/luxury
+- focus_areas: 2-4 key focus areas from the preferences
+- vibe: single word describing the trip energy (relaxed/adventurous/cultural/fast-paced)"""
 
 
 async def routing_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    LangGraph node: AI Call #2.
-    Returns routing_decision which drives the conditional edge after this node.
-    Uses gemma2:2b for single-word ultra-fast classification.
-    """
-    budget = float(state.get("budget", 1000))
-    travelers = int(state.get("num_travelers", 1))
-    budget_per_person = budget / max(travelers, 1)
+    request = state.get("user_request", "")
+    destination = state.get("destination", "Unknown")
+    origin = state.get("origin", "Unknown")
+    currency = state.get("currency", "USD")
+    budget = state.get("budget", 3000)
+    duration_days = state.get("duration_days", 7)
+    num_travelers = state.get("num_travelers", 1)
+    preferences = state.get("preferences", [])
 
-    # Rule-based pre-classification to save an AI call in obvious cases
-    if state.get("confidence_score", 1.0) < 0.4:
-        routing = "replan"
-    elif budget_per_person < 300:
-        routing = "budget"
-    elif budget_per_person > 2000:
-        routing = "luxury"
-    else:
-        # Only call AI if truly ambiguous
-        prompt = ROUTING_PROMPT_TEMPLATE.format(
-            destination=state.get("destination", "Unknown"),
-            budget=budget,
-            travelers=travelers,
-            preferences=", ".join(state.get("preferences", [])) or "none",
-            confidence=state.get("confidence_score", 0.8),
-        )
-        raw = await call_llm(
-            role="routing",
-            prompt=prompt,
-            system=ROUTING_SYSTEM,
-            provider=state.get("provider", "ollama"),
-            api_key=state.get("api_key"),
-            temperature=0.1,  # Near-deterministic for routing
-        )
-        # Normalize output
-        routing = raw.strip().lower().split()[0]
-        if routing not in ("standard", "budget", "luxury", "replan"):
-            routing = "standard"
+    budget_display = f"{budget:,.0f}" if budget < 999999 else "Unlimited"
 
-    trace = state.get("execution_trace", [])
+    prompt = ROUTING_PROMPT_TEMPLATE.format(
+        request=request,
+        destination=destination,
+        origin=origin,
+        currency=currency,
+        budget=budget_display,
+        duration_days=duration_days,
+        num_travelers=num_travelers,
+        preferences=", ".join(preferences) or "general",
+    )
+
+    result = await call_llm_json(
+        role="routing",
+        prompt=prompt,
+        system=ROUTING_SYSTEM,
+        provider=state.get("provider", "ollama"),
+        api_key=state.get("api_key"),
+        timeout=60,
+    )
+
+    if "error" in result:
+        return {
+            "routing_decision": "standard",
+            "execution_trace": ["routing_agent:fallback"],
+        }
+
     return {
-        **state,
-        "routing_decision": routing,
-        "execution_trace": trace + [f"routing_agent:{routing}"],
+        "routing_decision": result.get("trip_type", "standard"),
+        "execution_trace": ["routing_agent"],
     }

@@ -31,6 +31,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     if not user_request:
         return {
             "error": "No user request provided",
+            "duration_days": 7,
             "execution_trace": ["supervisor_agent:error"],
         }
 
