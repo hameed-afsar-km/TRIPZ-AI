@@ -46,6 +46,8 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "currency":       prev_context.get("currency", "USD"),
             "preferences":    prev_context.get("preferences", []),
             "confidence_score": 0.9,
+            "provider":       state.get("provider", "ollama"),
+            "api_key":        state.get("api_key"),
             "execution_trace": ["supervisor_agent:from_context"],
         }
 
@@ -57,6 +59,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         system=SUPERVISOR_SYSTEM,
         provider=state.get("provider", "ollama"),
         api_key=state.get("api_key"),
+        timeout=60,
     )
 
     if "error" in parsed:
@@ -128,6 +131,8 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "num_travelers": 1,
             "preferences": fallback_preferences,
             "currency": fallback_currency,
+            "provider":  state.get("provider", "ollama"),
+            "api_key":   state.get("api_key"),
             "warnings": ["Supervisor JSON parsing failed — using regex fallback. Results may be incomplete."],
             "execution_trace": ["supervisor_agent:fallback"],
         }
@@ -158,5 +163,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         "currency":       parsed.get("currency", "USD"),
         "preferences":    parsed.get("preferences", []),
         "confidence_score": float(parsed.get("confidence", 0.5)),
+        "provider":       state.get("provider", "ollama"),
+        "api_key":        state.get("api_key"),
         "execution_trace": ["supervisor_agent"],
     }

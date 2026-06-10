@@ -30,6 +30,24 @@ def _cache_key(prompt: str, system: Optional[str], provider: str, expect_json: b
 
 # ── Model Resolution ──────────────────────────────────────────────────────
 def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, expect_json: bool = False):
+    # Normalise provider name (case-insensitive, common aliases)
+    _normalised = provider.strip().lower()
+    _aliases = {
+        "google": "gemini",
+        "gemini": "gemini",
+        "google gemini": "gemini",
+        "openai": "openai",
+        "gpt": "openai",
+        "gpt-4o": "openai",
+        "gpt-4o-mini": "openai",
+        "anthropic": "anthropic",
+        "claude": "anthropic",
+        "groq": "groq",
+        "llama": "groq",
+        "openrouter": "openrouter",
+    }
+    provider = _aliases.get(_normalised, provider)
+
     key = api_key if api_key and api_key.strip() else "missing-key"
 
     if provider == "openai":
@@ -52,6 +70,8 @@ def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, exp
             "model": "qwen2.5:1.5b",
             "temperature": temperature,
             "base_url": "http://localhost:11434",
+            "client_kwargs": {"timeout": 300},
+            "async_client_kwargs": {"timeout": 300},
         }
         if expect_json:
             kwargs["format"] = "json"
@@ -68,6 +88,7 @@ async def call_llm(
     provider: str = "ollama",
     api_key: Optional[str] = None,
     use_cache: bool = True,
+    timeout: int = 30,
 ) -> str:
     ckey = _cache_key(prompt, system, provider, expect_json, temperature)
     if use_cache and ckey in _cache:
@@ -87,15 +108,15 @@ async def call_llm(
 
     try:
         if callback and not expect_json:
-            async for chunk in asyncio.wait_for(llm.astream(messages), timeout=120):
+            async for chunk in asyncio.wait_for(llm.astream(messages), timeout=timeout):
                 if hasattr(chunk, "content") and chunk.content:
                     await callback(chunk.content)
                     full_content += chunk.content
         else:
-            response = await asyncio.wait_for(llm.ainvoke(messages), timeout=120)
+            response = await asyncio.wait_for(llm.ainvoke(messages), timeout=timeout)
             full_content = response.content
     except asyncio.TimeoutError:
-        raise TimeoutError(f"LLM call timed out after 120s ({role})")
+        raise TimeoutError(f"LLM call timed out after {timeout}s ({role})")
     except Exception as e:
         err_type = _classify_llm_error(e)
         raise RuntimeError(f"[{err_type}] LLM call failed ({role}): {e}")
@@ -147,9 +168,10 @@ async def call_llm_json(
     role: str,
     prompt: str,
     system: Optional[str] = None,
-    retries: int = 2,
+    retries: int = 0,
     provider: str = "ollama",
     api_key: Optional[str] = None,
+    timeout: int = 30,
 ) -> Dict[str, Any]:
     last_raw = ""
     backoff = 0.05
@@ -163,6 +185,7 @@ async def call_llm_json(
                 expect_json=True,
                 provider=provider,
                 api_key=api_key,
+                timeout=timeout,
             )
             last_raw = raw
             return json.loads(raw)

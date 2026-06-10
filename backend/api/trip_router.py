@@ -4,6 +4,7 @@ import time
 import logging
 from typing import AsyncGenerator, Optional
 
+import httpx
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -71,6 +72,32 @@ async def plan_trip_stream(request: TripRequest):
         logger.info("")
         yield _sse("start", {"message": "TRIPZ agents initializing...", "request": request.user_request})
 
+        # ── Pre-flight provider health check ──
+        if request.provider == "ollama":
+            try:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    resp = await client.get("http://localhost:11434/api/tags")
+                    if resp.status_code != 200:
+                        yield _sse("error", {"message": f"Ollama returned status {resp.status_code}. Is it running?"})
+                        return
+                # Fire-and-forget model warmup: loads the model into memory so the
+                # first LLM call doesn't pay the 20-40s loading penalty.
+                async def _warmup():
+                    try:
+                        async with httpx.AsyncClient(timeout=180) as wc:
+                            await wc.post("http://localhost:11434/api/generate", json={
+                                "model": "qwen2.5:1.5b",
+                                "prompt": "hello",
+                                "stream": False,
+                                "keep_alive": "5m",
+                            })
+                    except Exception:
+                        pass  # warmup failure is non-fatal
+                asyncio.create_task(_warmup())
+            except (httpx.ConnectError, httpx.TimeoutException):
+                yield _sse("error", {"message": "Cannot reach Ollama at localhost:11434. Start Ollama and try again."})
+                return
+
         # ── Token streaming callback ──
         async def on_token(token: str):
             await token_queue.put(token)
@@ -88,9 +115,19 @@ async def plan_trip_stream(request: TripRequest):
 
             async def collect():
                 nonlocal graph_done
+                deadline = asyncio.get_event_loop().time() + 170
                 try:
-                    async for ev in trip_graph.astream_events(initial_state, version="v2"):
+                    ait = trip_graph.astream_events(initial_state)
+                    while True:
+                        remaining = deadline - asyncio.get_event_loop().time()
+                        if remaining <= 0:
+                            raise asyncio.TimeoutError()
+                        ev = await asyncio.wait_for(ait.__anext__(), timeout=remaining)
                         await graph_events.put(ev)
+                except StopAsyncIteration:
+                    pass
+                except asyncio.TimeoutError:
+                    await graph_events.put({"__type": "error", "data": "Graph execution timed out. Please try again or switch to a faster provider."})
                 except Exception as e:
                     await graph_events.put({"__type": "error", "data": str(e)})
                 finally:

@@ -25,19 +25,19 @@ import {
 
 interface AgentMessage {
   id: string;
-  agent: "Planner" | "Budget" | "Transit" | "Curator";
+  agent: "Planner" | "Budget" | "Transit" | "Curator" | "Synthesis";
   status: "thinking" | "completed";
   text: string;
   timestamp: string;
   isError?: boolean;
 }
 
-const AGENT_MAP: Record<string, { name: "Planner" | "Budget" | "Transit" | "Curator"; step: number }> = {
+const AGENT_MAP: Record<string, { name: "Planner" | "Budget" | "Transit" | "Curator" | "Synthesis"; step: number }> = {
   "supervisor_agent": { name: "Planner", step: 0 },
   "budget_agent":     { name: "Budget", step: 1 },
   "transit_agent":    { name: "Transit", step: 2 },
   "curator_agent":    { name: "Curator", step: 3 },
-  "itinerary_agent":  { name: "Planner", step: 0 },
+  "itinerary_agent":  { name: "Synthesis", step: 4 },
   "clarify_node":     { name: "Curator", step: 3 },
 };
 
@@ -268,6 +268,11 @@ export default function Home() {
     abortControllerRef.current = controller;
 
     let logCounter = 1;
+    let isTimeout = false;
+    const timeoutId = setTimeout(() => {
+      isTimeout = true;
+      controller.abort();
+    }, 200000);
     setSimulationStage("agents");
     setIsProcessing(true);
     setStreamingTokens("");
@@ -410,7 +415,19 @@ export default function Home() {
       }
     } catch (error: any) {
       if (error.name === "AbortError") {
-        console.log("Fetch aborted by user");
+        if (isTimeout) {
+          setSimulationLogs(prev => [...prev, {
+            id: "timeout",
+            agent: "Planner",
+            status: "completed",
+            text: "Request timed out after 120 seconds. The backend might be unavailable or overloaded.",
+            timestamp: new Date().toLocaleTimeString(),
+            isError: true,
+          }]);
+          setValidationError("The request took too long. Check that Ollama is running (default: qwen2.5:1.5b) or try a different provider in Settings.");
+          setIsProcessing(false);
+          setSimulationStage("done");
+        }
         return;
       }
       console.error(error);
@@ -425,6 +442,7 @@ export default function Home() {
       setIsProcessing(false);
       setSimulationStage("done");
     } finally {
+      clearTimeout(timeoutId);
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
       }
@@ -501,7 +519,8 @@ export default function Home() {
     { name: "Planner", icon: Compass, step: 0 },
     { name: "Budget", icon: DollarSign, step: 1 },
     { name: "Transit", icon: Plane, step: 2 },
-    { name: "Curator", icon: MapPin, step: 3 }
+    { name: "Curator", icon: MapPin, step: 3 },
+    { name: "Synthesis", icon: Sparkles, step: 4 }
   ];
 
   return (
