@@ -46,12 +46,12 @@ def route_after_supervisor(state: TripState) -> list[str]:
     return ["budget_agent", "transit_agent", "curator_agent", "routing_agent"]
 
 
-def route_after_critic(state: TripState) -> Literal["itinerary_agent", END]:
+def route_after_critic(state: TripState) -> Literal["itinerary_agent", "__end__"]:
     needs_replan = state.get("needs_replanning", False)
     replan_count = state.get("replan_count", 0)
     if needs_replan and replan_count < 2:
         return "itinerary_agent"
-    return END
+    return "__end__"
 
 
 def clarify_node(state: TripState) -> TripState:
@@ -112,7 +112,7 @@ def build_graph() -> StateGraph:
         route_after_critic,
         {
             "itinerary_agent": "itinerary_agent",
-            END:               END,
+            "__end__":         END,
         },
     )
 

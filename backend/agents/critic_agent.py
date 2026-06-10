@@ -28,7 +28,7 @@ Return JSON:
 
 - pass: true only if ALL checks pass with zero issues
 - issues: list of specific problems found (empty if pass)
-- feedback: instructions for what to fix (empty if pass)
+- feedback: detailed instructions for what to fix (empty if pass)
 - needs_replanning: true if issues are severe enough to regenerate"""
 
 
@@ -36,8 +36,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     itinerary = state.get("itinerary", {})
     if not itinerary or "error" in itinerary:
         return {
-            "critic_feedback": "",
-            "critic_issues": [],
+            "replan_instructions": "",
             "needs_replanning": False,
             "execution_trace": ["critic_agent:skip"],
         }
@@ -51,8 +50,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     replan_count = state.get("replan_count", 0)
     if replan_count >= 2:
         return {
-            "critic_feedback": "",
-            "critic_issues": [],
+            "replan_instructions": "",
             "needs_replanning": False,
             "execution_trace": ["critic_agent:max_replan"],
         }
@@ -77,18 +75,16 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     if "error" in result:
         return {
-            "critic_feedback": "",
-            "critic_issues": [],
+            "replan_instructions": "",
             "needs_replanning": False,
             "execution_trace": ["critic_agent:error"],
         }
 
     needs_replan = result.get("needs_replanning", False)
-    issues = result.get("issues", [])
+    feedback = result.get("feedback", "")
 
     return {
-        "critic_feedback": result.get("feedback", ""),
-        "critic_issues": issues,
+        "replan_instructions": feedback,
         "needs_replanning": needs_replan,
         "replan_count": replan_count + 1,
         "execution_trace": ["critic_agent"],
