@@ -4,7 +4,7 @@ from services.llm_service import call_llm_json
 
 SUPERVISOR_SYSTEM = """You are a travel request parser. Extract ALL details from the user's request.
 - Extract destination, origin, duration in days, budget, number of travelers, preferences
-- Handle "any budget" as no limit (return 999999)
+- ONLY use 999999 for budget if the user explicitly says "any budget" or "no limit". Otherwise use the exact number stated.
 - Infer currency from origin (India→INR, USA→USD, etc.) or from explicit mentions like "rupees" (→INR)
 - Capture preferences like "visit all places", "culture", "adventure", etc.
 - Calculate start/end dates from duration
@@ -16,7 +16,7 @@ Analyze and extract:
 1. Destination city/country
 2. Origin city/country (if not stated, default to "Unknown")
 3. Trip duration in DAYS (count "10 days" as 10, "a week" as 7, etc.)
-4. Total budget (if "any" or "no limit", use 999999; if no number, default to 3000)
+4. Total budget (use the EXACT number stated; ONLY use 999999 if user says "any budget" or "no limit"; if no number at all, default to 3000)
 5. Currency (INR if from/in India or "rupees" mentioned, USD otherwise; infer from origin if possible)
 6. Number of travelers (default 1)
 7. Preferences list (culture, adventure, food, relaxation, budget, luxury, "visit all places", etc.)
@@ -99,8 +99,8 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             first_word = raw.split()[0] if raw.split() else ""
             fallback_dest = first_word.title() if first_word else "Unknown"
 
-        # Extract duration in days
-        m = re.search(r'(\d+)\s*(?:days?|d)\b', raw, re.IGNORECASE)
+        # Extract duration in days (handles "10 days", "10-day", "7d")
+        m = re.search(r'(\d+)\s*-?\s*(?:days?|d)\b', raw, re.IGNORECASE)
         if m:
             fallback_duration = int(m.group(1))
 
@@ -115,8 +115,12 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             fallback_currency = "USD"
 
         # Detect "any budget" or "all places"
-        if re.search(r'\b(?:any|unlimited|no limit|all|budget)\s*budget\b', raw, re.IGNORECASE):
+        if re.search(r'\b(?:any|unlimited|no\s+limit)\s+budget\b', raw, re.IGNORECASE):
             fallback_budget = 999999
+        # Try to extract explicit budget amount
+        m_budget = re.search(r'(\d[\d,]*)\s*(?:rupees|rs|inr|usd|\$|euros?|dollars?)\b', raw, re.IGNORECASE)
+        if m_budget:
+            fallback_budget = float(m_budget.group(1).replace(",", ""))
         if re.search(r'\b(?:visit|explore|see)\s+(?:all|every)\b', raw, re.IGNORECASE):
             fallback_preferences.append("visit all places")
 
@@ -157,6 +161,15 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     budget = parsed.get("budget", 3000)
     if isinstance(budget, str) and budget.lower() in ["any", "unlimited", "no limit"]:
         budget = 999999.0
+    
+    # Post-process: if budget is 999999 but the user explicitly stated a numeric budget,
+    # # extract it from the raw request (qwen2.5 often gets this wrong)
+    import re as _re
+    if float(budget) >= 999999:
+        m = _re.search(r'(\d[\d,]*)\s*(?:rupees|rs|inr|usd|\$|euros?|dollars?)\b', state.get("user_request", ""), _re.IGNORECASE)
+        if m:
+            budget = float(m.group(1).replace(",", ""))
+            parsed["budget"] = budget
     
     return {
         **state,

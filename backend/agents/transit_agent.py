@@ -35,18 +35,12 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
                     warnings.append(f"Transit error: {result['error']}")
 
         return {
-            **state,
             "weather": weather,
             "transport": transport,
-            "warnings": warnings,
-            "execution_trace": state.get("execution_trace", []) + ["transit_agent"],
         }
     except Exception as e:
         return {
-            **state,
             "weather": {"error": str(e)},
             "transport": {},
-            "warnings": [f"Transit agent error: {str(e)}"],
-            "execution_trace": state.get("execution_trace", []) + ["transit_agent:error"],
         }
 

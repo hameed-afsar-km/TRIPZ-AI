@@ -19,10 +19,5 @@ async def curator_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         if "error" in result:
             warnings.append(f"Curator error: {result['error']}")
         
-    return {
-        **state,
-        "activities": activities,
-        "warnings": warnings,
-        "execution_trace": state.get("execution_trace", []) + ["curator_agent"],
-    }
+    return {"activities": activities}
 
