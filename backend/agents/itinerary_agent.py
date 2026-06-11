@@ -57,10 +57,13 @@ async def _recalculate_costs(
     activities: List[Dict],
     currency: str,
     num_days: int,
+    budget: float = 0,
 ) -> Dict[str, Any]:
     days = itinerary.get("days", [])
     recalculated_days = []
     used_names: set = set()
+
+    daily_budget = (budget / num_days) if budget > 0 and budget < 999999 else 0
 
     venue_names = [a.get("name", "").lower().strip() for a in activities if a.get("name")]
 
@@ -80,11 +83,14 @@ async def _recalculate_costs(
                     return text
         return text
 
+    total_cost = 0.0
     for d in days:
         day_num = d.get("day", 1)
         morning = _replace_duplicate(d.get("morning", ""))
         afternoon = _replace_duplicate(d.get("afternoon", ""))
         evening = _replace_duplicate(d.get("evening", ""))
+        day_cost = round(daily_budget, 2) if daily_budget else 0
+        total_cost += day_cost
 
         recalculated_days.append({
             "day": day_num,
@@ -92,7 +98,7 @@ async def _recalculate_costs(
             "morning": morning,
             "afternoon": afternoon,
             "evening": evening,
-            "estimated_cost": 0,
+            "estimated_cost": day_cost,
             "budget_tip": d.get("budget_tip", ""),
         })
 
@@ -100,7 +106,7 @@ async def _recalculate_costs(
         **itinerary,
         "currency": itinerary.get("currency", currency),
         "days": recalculated_days,
-        "total_estimated_cost": 0,
+        "total_estimated_cost": round(total_cost, 2),
     }
 
 
@@ -173,7 +179,7 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     trace = state.get("execution_trace", [])
     if isinstance(itinerary, dict) and "error" not in itinerary:
-        itinerary = await _recalculate_costs(itinerary, hotels, activities, currency, num_days)
+        itinerary = await _recalculate_costs(itinerary, hotels, activities, currency, num_days, budget)
         result: Dict[str, Any] = {**state, "itinerary": itinerary, "execution_trace": trace + ["itinerary_agent"]}
     else:
         err = itinerary.get("error", "LLM synthesis failed")

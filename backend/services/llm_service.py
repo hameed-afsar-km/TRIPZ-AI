@@ -53,7 +53,10 @@ def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, exp
     if provider == "openai":
         return ChatOpenAI(model="gpt-4o-mini", temperature=temperature, api_key=key)
     elif provider == "groq":
-        return ChatGroq(model="llama-3.3-70b-versatile", temperature=temperature, api_key=key)
+        kwargs = {"model": "llama-3.3-70b-versatile", "temperature": temperature, "api_key": key}
+        if expect_json:
+            kwargs["response_format"] = {"type": "json_object"}
+        return ChatGroq(**kwargs)
     elif provider == "anthropic":
         return ChatAnthropic(model="claude-3-haiku-20240307", temperature=temperature, api_key=key)
     elif provider == "gemini":

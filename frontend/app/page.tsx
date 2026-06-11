@@ -34,10 +34,12 @@ interface AgentMessage {
 
 const AGENT_MAP: Record<string, { name: "Planner" | "Budget" | "Transit" | "Curator" | "Synthesis"; step: number }> = {
   "supervisor_agent": { name: "Planner", step: 0 },
+  "routing_agent":    { name: "Planner", step: 0 },
   "budget_agent":     { name: "Budget", step: 1 },
   "transit_agent":    { name: "Transit", step: 2 },
   "curator_agent":    { name: "Curator", step: 3 },
   "itinerary_agent":  { name: "Synthesis", step: 4 },
+  "critic_agent":     { name: "Synthesis", step: 4 },
   "clarify_node":     { name: "Curator", step: 3 },
 };
 
@@ -88,12 +90,12 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 function formatCurrency(amount: number | undefined | null, currencyCode?: string): string {
-  const amt = amount ?? 0;
+  if (amount == null || amount === 0) return "—";
   const code = currencyCode || "USD";
   const symbol = CURRENCY_SYMBOLS[code] || code + " ";
-  if (amt >= 1e5) return `${symbol}${(amt / 1e5).toFixed(1)}L`;
-  if (amt >= 1e3) return `${symbol}${(amt / 1e3).toFixed(1)}K`;
-  return `${symbol}${amt.toLocaleString("en-IN")}`;
+  if (amount >= 1e5) return `${symbol}${(amount / 1e5).toFixed(1)}L`;
+  if (amount >= 1e3) return `${symbol}${(amount / 1e3).toFixed(1)}K`;
+  return `${symbol}${amount.toLocaleString("en-IN")}`;
 }
 
 interface DayData {
