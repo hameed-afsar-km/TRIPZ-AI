@@ -1,64 +1,92 @@
 """
-Transport Tool — zero AI calls.
-Calculates transport options and estimated costs between origin and destination.
-In production: swap with Amadeus Flight API, Rome2rio, or Skyscanner API.
+Transport Tool — live distance calculation using OpenStreetMap geocoding.
+Estimates flight cost based on real distance between origin and destination.
+No API key required. Uses Nominatim (free) for geocoding.
 """
 
-from typing import Any, Dict
+import math
+from typing import Any, Dict, Tuple
+from services.geo_service import geocode_city
 
 
-def _estimate_flight_cost(origin: str, destination: str, travelers: int) -> Dict[str, Any]:
-    """Rough cost simulation. Replace with real API."""
-    # Intercontinental heuristic: $400-900/person, Regional: $80-300/person
-    base = 450 if origin and destination else 300
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _estimate_flight_cost_km(distance_km: float, travelers: int) -> Dict[str, Any]:
+    is_regional = distance_km < 1500
+    cost_per_km = 0.08 if is_regional else 0.05
+    base = max(distance_km * cost_per_km, 50)
+    duration_h = round(distance_km / 850, 1)
     return {
         "type": "flight",
-        "provider": "Simulated (replace with Amadeus API)",
-        "cost_per_person": base,
-        "total_cost": base * travelers,
-        "duration_hours": 8,
-        "direct": True,
+        "provider": "Estimated from distance",
+        "cost_per_person": round(base, 0),
+        "total_cost": round(base * travelers, 0),
+        "duration_hours": max(duration_h, 1),
+        "direct": not is_regional,
     }
 
 
-def _estimate_train_cost(origin: str, destination: str, travelers: int) -> Dict[str, Any]:
-    base = 95
+def _estimate_train_cost_km(distance_km: float, travelers: int) -> Dict[str, Any]:
+    if distance_km > 2000:
+        return None
+    cost_per_km = 0.04
+    base = distance_km * cost_per_km
+    duration_h = round(distance_km / 120, 1)
     return {
         "type": "train",
-        "provider": "Simulated (replace with Rome2Rio API)",
-        "cost_per_person": base,
-        "total_cost": base * travelers,
-        "duration_hours": 4,
-        "direct": False,
+        "provider": "Estimated from distance",
+        "cost_per_person": round(max(base, 15), 0),
+        "total_cost": round(max(base, 15) * travelers, 0),
+        "duration_hours": max(duration_h, 1),
+        "direct": distance_km < 500,
     }
 
 
 async def transport_tool(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    LangGraph node: builds transport options for origin → destination.
-    Returns ranked options by cost and duration.
-    No LLM call — pure calculation.
-    """
     origin = state.get("origin", "Unknown")
     destination = state.get("destination", "Unknown")
     travelers = int(state.get("num_travelers", 1))
     budget = float(state.get("budget", 1000))
 
-    options = [
-        _estimate_flight_cost(origin, destination, travelers),
-        _estimate_train_cost(origin, destination, travelers),
-    ]
+    origin_geo = await geocode_city(origin) if origin and origin != "Unknown" else None
+    dest_geo = await geocode_city(destination)
 
-    # Filter: only show options within 40% of total budget
+    options = []
+    if origin_geo and dest_geo:
+        dist = _haversine_km(
+            origin_geo["lat"], origin_geo["lon"],
+            dest_geo["lat"], dest_geo["lon"],
+        )
+        flight = _estimate_flight_cost_km(dist, travelers)
+        options.append(flight)
+        train = _estimate_train_cost_km(dist, travelers)
+        if train:
+            options.append(train)
+    else:
+        options.append({
+            "type": "flight",
+            "provider": "Estimated (coordinates unavailable)",
+            "cost_per_person": 450,
+            "total_cost": 450 * travelers,
+            "duration_hours": 6,
+            "direct": True,
+        })
+
     budget_cap = budget * 0.40
     affordable = [o for o in options if o["total_cost"] <= budget_cap]
     if not affordable:
         affordable = [min(options, key=lambda x: x["total_cost"])]
 
-    # Sort by cost ascending
     affordable.sort(key=lambda x: x["total_cost"])
 
-    # Also add local transit estimate for within-city movement
     local_transit = {
         "type": "local_transit",
         "modes": ["metro", "bus", "taxi"],
