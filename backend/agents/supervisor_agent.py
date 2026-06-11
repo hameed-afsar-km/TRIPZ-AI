@@ -1,6 +1,6 @@
 import json
 from typing import Any, Dict
-from services.llm_service import call_llm_json
+from services.llm_service import call_llm_json, resolve_provider
 
 SUPERVISOR_SYSTEM = """You are a travel request parser. Extract ALL details from the user's request.
 - Extract destination, origin, duration in days, budget, number of travelers, preferences
@@ -59,7 +59,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         role="supervisor",
         prompt=prompt,
         system=SUPERVISOR_SYSTEM,
-        provider=state.get("provider", "ollama"),
+        provider=resolve_provider(state, "supervisor"),
         api_key=state.get("api_key"),
         timeout=60,
     )

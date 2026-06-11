@@ -312,7 +312,7 @@ export default function Home() {
     mouseY.set(y);
   };
 
-  const runAgentSimulation = async (userInput: string, provider: string = "ollama", apiKey: string = "") => {
+  const runAgentSimulation = async (userInput: string, provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -349,6 +349,7 @@ export default function Home() {
           stream: true,
           provider: provider,
           api_key: apiKey,
+          agent_providers: Object.keys(agentProviders).length > 0 ? agentProviders : undefined,
           session_id: sessionId,
         }),
         signal: controller.signal,
@@ -501,14 +502,14 @@ export default function Home() {
     }
   };
 
-  const handleSend = (msg: string, files?: File[], provider: string = "ollama", apiKey: string = "") => {
+  const handleSend = (msg: string, files?: File[], provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}) => {
     if (!msg || msg.trim() === "") return;
     if (!isTripRelated(msg)) {
       setValidationError("Please type a request related to trip planning (e.g., '3 days in Tokyo', 'Paris budget route', or 'explore Rome').");
       return;
     }
     setValidationError(null);
-    runAgentSimulation(msg, provider, apiKey);
+    runAgentSimulation(msg, provider, apiKey, agentProviders);
   };
 
   const handleStop = () => {

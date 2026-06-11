@@ -24,6 +24,7 @@ class TripRequest(BaseModel):
     provider: str = Field(default="ollama")
     api_key: Optional[str] = Field(default=None)
     session_id: Optional[str] = Field(default=None)
+    agent_providers: Optional[dict] = Field(default=None)
 
 
 class TripResponse(BaseModel):
@@ -56,6 +57,7 @@ async def plan_trip_stream(request: TripRequest):
             "user_request": request.user_request,
             "provider": request.provider,
             "api_key": request.api_key,
+            "agent_providers": request.agent_providers or {},
             "replan_count": 0,
             "warnings": [],
             "execution_trace": [],
@@ -270,6 +272,7 @@ async def plan_trip(request: TripRequest) -> TripResponse:
         "user_request": request.user_request,
         "provider": request.provider,
         "api_key": request.api_key,
+        "agent_providers": request.agent_providers or {},
         "replan_count": 0,
         "warnings": [],
         "execution_trace": [],

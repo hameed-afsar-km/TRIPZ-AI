@@ -1,12 +1,14 @@
 import json
 import logging
-from typing import Any, Dict, List
-from services.llm_service import call_llm_json
+from typing import Any, Dict, List, Optional
+
+from services.llm_service import call_llm_json, resolve_provider
+from services.pricing_service import get_hotel_price
 
 logger = logging.getLogger("tripz.agents")
 
 
-ITINERARY_SYSTEM = "You are a travel planner. Output ONLY valid JSON."
+ITINERARY_SYSTEM = "You are a travel planner. Output ONLY valid JSON. Every slot must list a specific real venue name, not a generic description."
 
 ITINERARY_PROMPT_TEMPLATE = """Plan a {num_days}-day trip to {destination} from {origin}.
 Trip style: {trip_type}. Budget: {currency} {budget}. Preferences: {preferences}.
@@ -18,16 +20,16 @@ Weather: {weather_summary}
 
 {replan_context}
 RULES:
-1. Stay within budget or close to it (unless unlimited)
+1. Stay within budget
 2. Avoid outdoor activities on bad weather days
 3. Day 1: arrival + evening activity. Last day: departure + morning activity.
-4. Fill ALL {num_days} days (3 slots each: morning, afternoon, evening)
+4. Fill ALL {num_days} days — 3 slots each (morning, afternoon, evening) = {slot_count} total slots
 5. Each venue name from the list can be used AT MOST ONCE
-6. If there aren't enough unique venues for all slots, you MAY supplement with a short generic category description (e.g. "Local cuisine lunch", "Evening walk"). But NEVER more than 50% generic.
-7. For venue slots: format as "Venue Name — short description"
-8. Mix themes across days (culture, food, adventure, sightseeing, relaxation)
-9. Include a budget_tip per day with a money-saving suggestion for {destination}
-10. Keep descriptions SHORT — max 8 words each
+6. If you run out of venue names, REUSE the most relevant one with "(repeat)" in the description. NEVER invent fake venues.
+7. Format: "Venue Name — short description" (venue name MUST be FROM THE LIST above)
+8. Mix themes across days: pick from: Arrival & City Orientation, Cultural Immersion & Heritage, Adventure & Outdoor Exploration, Food Markets & Local Life, Iconic Landmarks & Sightseeing, Relaxation & Wellness, Shopping & Entertainment, Day Trip & Beyond
+9. Include a budget_tip per day with a specific money-saving suggestion
+10. BANNED generic phrases (NEVER use these): "Local cuisine lunch", "Evening walk", "Last minute shopping", "Departure", "Check-in", "Check-out", "Food tour", "Campfire", "Dune bashing", "Sightseeing", "Shopping", "Explore the city", "Relax at hotel"
 
 Return ONLY valid JSON:
 {{"title":"{num_days}-Day Trip to {destination}","currency":"{currency}","summary":"","days":[
@@ -39,16 +41,52 @@ def _trunc(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
-_SLOT_THEMES = [
-    "Arrival & City Orientation",
-    "Cultural Immersion & Heritage",
-    "Adventure & Outdoor Exploration",
-    "Food, Markets & Local Life",
-    "Iconic Landmarks & Sightseeing",
-    "Relaxation & Wellness",
-    "Shopping & Entertainment",
-    "Day Trip & Beyond",
+_GENERIC_PATTERNS = [
+    "local cuisine", "evening walk", "last minute shopping", "departure",
+    "check-in", "check-out", "check in", "check out", "food tour",
+    "campfire", "dune bashing", "sightseeing", "explore the city",
+    "relax at hotel", "local market", "shopping", "food tasting",
+    "evening stroll", "morning walk", "walk around", "exploration",
+    "prayer", "pray", "tasting", "thrill", "entertainment",
+    "dinner", "lunch", "breakfast",
 ]
+
+_HOTEL_PRICE_CACHE: dict[str, float] = {}
+
+
+def _is_generic(text: str) -> bool:
+    if not text:
+        return True
+    t = text.lower().strip()
+    for pat in _GENERIC_PATTERNS:
+        if pat in t:
+            return True
+    return False
+
+
+def _clean_generic_slots(days: list, venue_names: list) -> list:
+    cleaned = []
+    used = set()
+    for d in days:
+        slots = {}
+        for slot in ("morning", "afternoon", "evening"):
+            val = d.get(slot, "")
+            if _is_generic(val):
+                # Try to fill with an unused real venue
+                replacement = None
+                for vn in venue_names:
+                    if vn not in used:
+                        replacement = vn
+                        used.add(vn)
+                        break
+                slots[slot] = f"{replacement} — visit" if replacement else ""
+            else:
+                # Extract venue name from "Venue Name — desc"
+                vname = val.split("—")[0].strip().lower() if "—" in val else val.strip().lower()
+                used.add(vname)
+                slots[slot] = val
+        cleaned.append({**d, **slots})
+    return cleaned
 
 
 async def _recalculate_costs(
@@ -65,7 +103,19 @@ async def _recalculate_costs(
 
     daily_budget = (budget / num_days) if budget > 0 and budget < 999999 else 0
 
+    hotel_price = 0.0
+    if hotels:
+        p = hotels[0].get("price_per_night")
+        if p is not None:
+            hotel_price = float(p)
+
     venue_names = [a.get("name", "").lower().strip() for a in activities if a.get("name")]
+    venue_cost_map: dict = {}
+    for a in activities:
+        n = a.get("name", "").lower().strip()
+        c = a.get("cost")
+        if n and c is not None:
+            venue_cost_map[n] = float(c)
 
     def _replace_duplicate(text: str) -> str:
         if not text:
@@ -83,13 +133,34 @@ async def _recalculate_costs(
                     return text
         return text
 
+    def _slot_cost(text: str) -> float:
+        if not text:
+            return 0.0
+        t = text.lower().strip()
+        for vn, cost in venue_cost_map.items():
+            if vn in t:
+                return cost
+        return 0.0
+
+    days = _clean_generic_slots(days, venue_names)
+
     total_cost = 0.0
     for d in days:
         day_num = d.get("day", 1)
         morning = _replace_duplicate(d.get("morning", ""))
         afternoon = _replace_duplicate(d.get("afternoon", ""))
         evening = _replace_duplicate(d.get("evening", ""))
-        day_cost = round(daily_budget, 2) if daily_budget else 0
+
+        slot_costs = [_slot_cost(morning), _slot_cost(afternoon), _slot_cost(evening)]
+        day_cost_from_activities = max(slot_costs) if any(slot_costs) else 0
+
+        day_cost = day_cost_from_activities
+        if day_num != num_days and hotel_price:
+            day_cost += hotel_price
+
+        if not day_cost and daily_budget:
+            day_cost = round(daily_budget, 2)
+
         total_cost += day_cost
 
         recalculated_days.append({
@@ -98,7 +169,7 @@ async def _recalculate_costs(
             "morning": morning,
             "afternoon": afternoon,
             "evening": evening,
-            "estimated_cost": day_cost,
+            "estimated_cost": round(day_cost, 2),
             "budget_tip": d.get("budget_tip", ""),
         })
 
@@ -147,13 +218,24 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             unique_activities.append(a)
 
     hotel_data = [{k: h.get(k) for k in ("name","stars","type") if k in h} for h in hotels[:2]]
+
+    # Attempt to enrich hotels with live pricing
+    for h in hotels[:2]:
+        name = h.get("name", "")
+        if name and name not in _HOTEL_PRICE_CACHE:
+            price = await get_hotel_price(name, destination, currency)
+            if price is not None:
+                _HOTEL_PRICE_CACHE[name] = price
+                h["price_per_night"] = price
+
     transport_data = state.get("transport", {})
     if "distance_km" in transport_data:
         transport_data = {"distance_km": transport_data["distance_km"], "note": "Real-time pricing not available from free APIs"}
-    act_data = [a.get("name", "") for a in unique_activities[:15]]  # just names, no cost/desc
+    act_data = [a.get("name", "") for a in unique_activities[:25]]  # just names
 
     prompt = ITINERARY_PROMPT_TEMPLATE.format(
         num_days=num_days,
+        slot_count=num_days * 3,
         destination=destination,
         origin=origin,
         trip_type=trip_type,
@@ -162,7 +244,7 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         preferences=", ".join(preferences) or "general",
         hotels=_trunc(json.dumps(hotel_data), 300),
         transport=_trunc(json.dumps(transport_data), 200),
-        activities=_trunc(json.dumps(act_data), 1500),
+        activities=_trunc(json.dumps(act_data), 2000),
         weather_summary=_trunc(json.dumps([{"date":d.get("date"),"condition":d.get("condition"),"temp":d.get("temp_max_c")} for d in weather.get("forecast",[])[:3]]), 300),
         replan_context=replan_context,
     )
@@ -171,7 +253,7 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         role="itinerary",
         prompt=prompt,
         system=ITINERARY_SYSTEM,
-        provider=state.get("provider", "ollama"),
+        provider=resolve_provider(state, "itinerary"),
         api_key=state.get("api_key"),
         retries=1,
         timeout=90,

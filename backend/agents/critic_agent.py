@@ -1,6 +1,6 @@
 import json
 from typing import Any, Dict, List
-from services.llm_service import call_llm_json
+from services.llm_service import call_llm_json, resolve_provider
 
 CRITIC_SYSTEM = """You are a strict travel itinerary reviewer.
 Check for: vague descriptions, repeated text, wrong day count, wrong currency, budget issues, lack of variety.
@@ -70,7 +70,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         role="critic",
         prompt=prompt,
         system=CRITIC_SYSTEM,
-        provider=state.get("provider", "ollama"),
+        provider=resolve_provider(state, "critic"),
         api_key=state.get("api_key"),
         timeout=30,
     )

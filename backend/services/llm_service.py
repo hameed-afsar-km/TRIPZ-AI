@@ -23,6 +23,12 @@ token_callback_var: contextvars.ContextVar = contextvars.ContextVar("token_callb
 _cache: Dict[str, Any] = {}
 _cache_max = 64
 
+
+def resolve_provider(state: dict, agent_role: str) -> str:
+    """Return the provider for `agent_role`, checking agent_providers first."""
+    ap = state.get("agent_providers", {})
+    return ap.get(agent_role, state.get("provider", "ollama"))
+
 def _cache_key(prompt: str, system: Optional[str], provider: str, expect_json: bool, temperature: float) -> str:
     raw = f"{provider}|{system}|{prompt}|{expect_json}|{temperature}"
     return hashlib.md5(raw.encode()).hexdigest()

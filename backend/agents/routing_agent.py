@@ -1,5 +1,5 @@
 from typing import Any, Dict
-from services.llm_service import call_llm_json
+from services.llm_service import call_llm_json, resolve_provider
 
 ROUTING_SYSTEM = """You are a travel request classifier.
 Analyze the extracted trip details and determine the optimal travel style.
@@ -53,7 +53,7 @@ async def routing_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         role="routing",
         prompt=prompt,
         system=ROUTING_SYSTEM,
-        provider=state.get("provider", "ollama"),
+        provider=resolve_provider(state, "routing"),
         api_key=state.get("api_key"),
         timeout=60,
     )

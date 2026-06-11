@@ -1,6 +1,6 @@
 import json
 from typing import Any, Dict
-from services.llm_service import call_llm_json
+from services.llm_service import call_llm_json, resolve_provider
 
 REPLAN_SYSTEM = "You are a travel plan editor. Fix ONLY identified issues. Return full corrected itinerary JSON."
 
@@ -76,7 +76,7 @@ async def replanning_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         role="replanning",
         prompt=prompt,
         system=REPLAN_SYSTEM,
-        provider=state.get("provider", "ollama"),
+        provider=resolve_provider(state, "itinerary"),  # replan uses same provider as itinerary
         api_key=state.get("api_key"),
     )
 
