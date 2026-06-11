@@ -59,6 +59,10 @@ async def routing_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     if "error" in result:
-        return {"routing_decision": "standard"}
+        raise RuntimeError(f"Routing agent LLM call failed: {result.get('error')}")
 
-    return {"routing_decision": result.get("trip_type", "standard")}
+    trip_type = result.get("trip_type")
+    if trip_type not in ("standard", "budget", "luxury"):
+        raise RuntimeError(f"Routing agent returned invalid trip_type: {trip_type}")
+
+    return {"routing_decision": trip_type}

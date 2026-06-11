@@ -21,6 +21,7 @@ _cache_time: float = 0
 _CACHE_TTL: float = 3600
 _LOCK = asyncio.Lock()
 _last_nominatim: float = 0  # rate-limit: 1 req/sec
+_inflight: Dict[str, asyncio.Future] = {}  # in-flight geocode requests
 
 
 async def _geocode(city: str) -> Optional[Dict[str, Any]]:
@@ -56,9 +57,27 @@ async def geocode_city(city: str) -> Optional[Dict[str, Any]]:
     cached = _cache.get(key)
     if cached and (time.time() - cached.get("_ts", 0)) < _CACHE_TTL:
         return cached
-    result = await _geocode(city)
+
+    async with _LOCK:
+        # Check again under lock (another coroutine may have cached it)
+        cached = _cache.get(key)
+        if cached and (time.time() - cached.get("_ts", 0)) < _CACHE_TTL:
+            return cached
+        # Check if another coroutine is already fetching this city
+        fut = _inflight.get(key)
+        if fut is not None:
+            return await fut
+
+    # No cache hit and no in-flight — start a new request
+    fut = asyncio.ensure_future(_geocode(city))
+    _inflight[key] = fut
+    try:
+        result = await fut
+    finally:
+        async with _LOCK:
+            _inflight.pop(key, None)
+
     if result:
-        # Cap bbox to ~0.5° (~55km) around center — avoids huge region timeouts
         MAX_BBOX_RADIUS = 0.5
         lat, lon = result["lat"], result["lon"]
         result["bbox"] = (
@@ -68,7 +87,8 @@ async def geocode_city(city: str) -> Optional[Dict[str, Any]]:
             lon + MAX_BBOX_RADIUS,
         )
         result["_ts"] = time.time()
-        _cache[key] = result
+        async with _LOCK:
+            _cache[key] = result
     return result
 
 
@@ -130,26 +150,25 @@ async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
         return []
 
     bbox_str = _build_bbox_str(geo["bbox"])
-    # Fetch from 3 categories in parallel with simpler queries
-    async def _fetch_cat(tag: str, regex: str) -> List[Dict]:
-        q = f"""
-        [out:json][timeout:20];
-        (
-          node[{tag}~"{regex}"]({bbox_str});
-          way[{tag}~"{regex}"]({bbox_str});
-        );
-        out center 20;
-        """
-        try:
-            return await _overpass_query(q, 20)
-        except Exception:
-            return []
-
-    tourism_q = _fetch_cat("tourism", "attraction|museum|gallery|viewpoint|theme_park|nightclub")
-    historic_q = _fetch_cat("historic", "monument|castle|ruins|archaeological_site")
-    leisure_q = _fetch_cat("leisure", "park|garden|water_park")
-    results = await asyncio.gather(tourism_q, historic_q, leisure_q)
-    elements = results[0] + results[1] + results[2]
+    # Single combined query — much faster than 3 parallel queries
+    q = f"""
+    [out:json][timeout:20];
+    (
+      node["tourism"~"attraction|museum|gallery|viewpoint|theme_park|nightclub"]({bbox_str});
+      way["tourism"~"attraction|museum|gallery|viewpoint|theme_park|nightclub"]({bbox_str});
+      node["historic"~"monument|castle|ruins|archaeological_site"]({bbox_str});
+      way["historic"~"monument|castle|ruins|archaeological_site"]({bbox_str});
+      node["leisure"~"park|garden|water_park"]({bbox_str});
+      way["leisure"~"park|garden|water_park"]({bbox_str});
+    );
+    out center 30;
+    """
+    try:
+        elements = await _overpass_query(q, 20)
+    except Exception:
+        async with _LOCK:
+            _cache[key] = {"data": [], "_ts": time.time()}
+        return []
 
     if not elements:
         async with _LOCK:
@@ -163,12 +182,6 @@ async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
         "archaeological_site": "history",
         "park": "nature", "garden": "relaxation", "water_park": "adventure",
         "nightclub": "nightlife",
-    }
-    cost_map = {
-        "museum": 15, "gallery": 10, "attraction": 20, "viewpoint": 0,
-        "theme_park": 50, "monument": 10, "castle": 15, "ruins": 8,
-        "archaeological_site": 12, "park": 0, "garden": 5, "water_park": 35,
-        "nightclub": 20,
     }
 
     activities = []
@@ -185,14 +198,12 @@ async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
             tags.get("leisure") or tags.get("amenity") or ""
         )
         cat = cat_map.get(osm_type, "sightseeing")
-        cost = cost_map.get(osm_type, 15)
         indoor = osm_type in ("museum", "gallery", "nightclub", "theme_park")
 
         activities.append({
             "name": name,
             "category": cat,
-            "cost": cost,
-            "duration_hours": 2,
+            "cost": None,
             "indoor": indoor,
             "description": tags.get("description", tags.get("note",
                                f"Visit {name} in {destination}")),
@@ -219,27 +230,20 @@ async def fetch_hotels(destination: str) -> List[Dict[str, Any]]:
         return []
 
     bbox_str = _build_bbox_str(geo["bbox"])
-
-    async def _fetch_hotels(type_filter: str) -> List[Dict]:
-        q = f"""
-        [out:json][timeout:20];
-        (
-          {type_filter}["tourism"~"hotel|hostel|guest_house|motel"]({bbox_str});
-        );
-        out center 25;
-        """
-        try:
-            return await _overpass_query(q, 20)
-        except Exception:
-            return []
-
-    node_hotels, way_hotels = await asyncio.gather(
-        _fetch_hotels("node"), _fetch_hotels("way")
-    )
-    elements = node_hotels + way_hotels
-
-    star_price = {1: 25, 2: 40, 3: 70, 4: 130, 5: 280}
-    type_price = {"hostel": 15, "guest_house": 35, "motel": 45, "hotel": 60}
+    q = f"""
+    [out:json][timeout:20];
+    (
+      node["tourism"~"hotel|hostel|guest_house|motel"]({bbox_str});
+      way["tourism"~"hotel|hostel|guest_house|motel"]({bbox_str});
+    );
+    out center 30;
+    """
+    try:
+        elements = await _overpass_query(q, 20)
+    except Exception:
+        async with _LOCK:
+            _cache[key] = {"data": [], "_ts": time.time()}
+        return []
 
     hotels = []
     seen = set()
@@ -253,25 +257,18 @@ async def fetch_hotels(destination: str) -> List[Dict[str, Any]]:
         osm_type = tags.get("tourism", "hotel")
         stars_raw = tags.get("stars", "")
         try:
-            stars = int(stars_raw) if stars_raw else 3
+            stars = int(stars_raw) if stars_raw else None
         except (ValueError, TypeError):
-            stars = 3
-        stars = max(1, min(5, stars))
-
-        if osm_type in type_price:
-            price = type_price[osm_type]
-        else:
-            price = star_price.get(stars, 60)
-
-        # tilt price up/down by stars
-        price = int(price * (0.7 + stars * 0.1))
+            stars = None
+        if stars is not None:
+            stars = max(1, min(5, stars))
 
         hotels.append({
             "name": name,
+            "type": osm_type,
             "stars": stars,
-            "price_per_night": price,
-            "rating": round(3.5 + stars * 0.3, 1),
-            "amenities": [],
+            "price_per_night": None,
+            "rating": None,
         })
 
     async with _LOCK:

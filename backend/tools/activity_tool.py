@@ -1,7 +1,7 @@
 """
 Activity Tool — live data from OpenStreetMap (Overpass API).
 Fetches real POIs (attractions, museums, parks, etc.) for any destination.
-Free, no API key required. 1-hour cache.
+Returns real venue names and categories. No fabricated prices.
 """
 
 from typing import Any, Dict
@@ -15,18 +15,24 @@ async def activity_tool(state: Dict[str, Any]) -> Dict[str, Any]:
 
     activities = await fetch_activities(destination)
 
-    if activities:
-        # Prioritise activities matching user preferences
-        def _score(a: Dict) -> int:
-            cat = a.get("category", "").lower()
-            name = a.get("name", "").lower()
-            score = 0
-            for p in pref_lower:
-                if p in cat or p in name:
-                    score += 1
-            return score
+    if not activities:
+        trace = state.get("execution_trace", [])
+        return {
+            **state,
+            "activities": [],
+            "execution_trace": trace + ["activity_tool:empty"],
+        }
 
-        activities.sort(key=_score, reverse=True)
+    def _score(a: Dict) -> int:
+        cat = a.get("category", "").lower()
+        name = a.get("name", "").lower()
+        score = 0
+        for p in pref_lower:
+            if p in cat or p in name:
+                score += 1
+        return score
+
+    activities.sort(key=_score, reverse=True)
 
     trace = state.get("execution_trace", [])
     return {

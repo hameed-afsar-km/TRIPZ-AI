@@ -70,6 +70,7 @@ def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, exp
             "model": "qwen2.5:1.5b",
             "temperature": temperature,
             "base_url": "http://localhost:11434",
+            "num_predict": 800,
             "client_kwargs": {"timeout": 300},
             "async_client_kwargs": {"timeout": 300},
         }

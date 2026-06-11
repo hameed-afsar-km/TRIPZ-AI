@@ -81,9 +81,12 @@ async def replanning_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     if "error" in patched or not patched.get("days"):
+        warnings = state.get("warnings", [])
+        warnings.append(f"Replanning LLM call failed: {patched.get('error', 'no days in output')}. "
+                        f"Original itinerary kept unchanged.")
         return {
             **state,
-            "warnings": state.get("warnings", []) + ["Replanning failed — keeping original"],
+            "warnings": warnings,
             "replan_count": state.get("replan_count", 0) + 1,
             "needs_replanning": False,
             "execution_trace": trace + ["replanning_agent:failed"],

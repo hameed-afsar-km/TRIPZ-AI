@@ -141,7 +141,8 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "num_travelers": 1,
             "preferences": fallback_preferences,
             "currency": fallback_currency,
-            "warnings": ["Supervisor JSON parsing failed — using regex fallback. Results may be incomplete."],
+            "warnings": [f"Supervisor LLM parsing failed ({parsed.get('error', 'unknown')}). "
+                         "Used regex fallback on raw text — some fields may be wrong."],
             "execution_trace": state.get("execution_trace", []) + ["supervisor_agent:fallback"],
         }
 

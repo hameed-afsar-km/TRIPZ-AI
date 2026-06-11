@@ -72,14 +72,17 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         system=CRITIC_SYSTEM,
         provider=state.get("provider", "ollama"),
         api_key=state.get("api_key"),
-        timeout=60,
+        timeout=30,
     )
 
     if "error" in result:
+        warnings = state.get("warnings", [])
+        warnings.append(f"Critic review failed: {result.get('error')}. Itinerary was not validated.")
         return {
             **state,
             "replan_instructions": "",
             "needs_replanning": False,
+            "warnings": warnings,
             "execution_trace": state.get("execution_trace", []) + ["critic_agent:error"],
         }
 

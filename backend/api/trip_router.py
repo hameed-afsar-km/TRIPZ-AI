@@ -80,20 +80,17 @@ async def plan_trip_stream(request: TripRequest):
                     if resp.status_code != 200:
                         yield _sse("error", {"message": f"Ollama returned status {resp.status_code}. Is it running?"})
                         return
-                # Fire-and-forget model warmup: loads the model into memory so the
-                # first LLM call doesn't pay the 20-40s loading penalty.
-                async def _warmup():
-                    try:
-                        async with httpx.AsyncClient(timeout=180) as wc:
-                            await wc.post("http://localhost:11434/api/generate", json={
-                                "model": "qwen2.5:1.5b",
-                                "prompt": "hello",
-                                "stream": False,
-                                "keep_alive": "5m",
-                            })
-                    except Exception:
-                        pass  # warmup failure is non-fatal
-                asyncio.create_task(_warmup())
+                # Warm up model BEFORE graph starts — cold start adds 20-40s
+                try:
+                    async with httpx.AsyncClient(timeout=30) as wc:
+                        await wc.post("http://localhost:11434/api/generate", json={
+                            "model": "qwen2.5:1.5b",
+                            "prompt": "hello",
+                            "stream": False,
+                            "keep_alive": "5m",
+                        })
+                except Exception:
+                    pass  # warmup failure is non-fatal
             except (httpx.ConnectError, httpx.TimeoutException):
                 yield _sse("error", {"message": "Cannot reach Ollama at localhost:11434. Start Ollama and try again."})
                 return
