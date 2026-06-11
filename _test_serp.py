@@ -1,4 +1,4 @@
-import asyncio, os, sys
+import asyncio, os, sys, json
 sys.path.insert(0, 'backend')
 from dotenv import load_dotenv
 load_dotenv()
@@ -27,6 +27,10 @@ async def test():
             props = data.get('properties', [])
             print(f'Properties found: {len(props)}')
             for p in props[:3]:
-                print(f'  {p.get("name")} - rates: {p.get("rate_per_night")}')
+                name = p.get("name", "?")
+                rn = p.get("rate_per_night", {})
+                price = rn.get("extracted_lowest") or rn.get("lowest") or rn.get("extracted")
+                stars = p.get("stars")
+                print(f'  name={name} price={price} stars={stars}')
 
 asyncio.run(test())
