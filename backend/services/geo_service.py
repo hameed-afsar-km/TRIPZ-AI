@@ -7,6 +7,7 @@ Geo Service — live location data from OpenStreetMap (free, no API key).
 
 import asyncio
 import json
+import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 import httpx
@@ -99,6 +100,22 @@ def _build_bbox_str(bbox: Tuple[float, float, float, float]) -> str:
     return f"{south},{west},{north},{east}"
 
 
+def _has_latin(text: str) -> bool:
+    return bool(re.search(r'[a-zA-Z]', text))
+
+
+def _best_name(tags: Dict[str, Any]) -> str:
+    name = (tags.get("name:en") or tags.get("name") or "").strip()
+    if not name:
+        return ""
+    if not _has_latin(name):
+        for tag in ("name:en", "int_name", "official_name", "alt_name", "name"):
+            val = tags.get(tag, "").strip()
+            if val and _has_latin(val):
+                return val
+    return name
+
+
 async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
     key = f"act:{destination.lower().strip()}"
     async with _LOCK:
@@ -158,7 +175,7 @@ async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
     seen_names = set()
     for el in elements:
         tags = el.get("tags", {})
-        name = tags.get("name", "").strip()
+        name = _best_name(tags)
         if not name or name.lower() in seen_names:
             continue
         seen_names.add(name.lower())
@@ -228,7 +245,7 @@ async def fetch_hotels(destination: str) -> List[Dict[str, Any]]:
     seen = set()
     for el in elements:
         tags = el.get("tags", {})
-        name = tags.get("name", "").strip()
+        name = _best_name(tags)
         if not name or name.lower() in seen:
             continue
         seen.add(name.lower())

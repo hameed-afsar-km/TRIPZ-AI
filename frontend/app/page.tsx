@@ -78,18 +78,40 @@ const isTripRelated = (text: string): boolean => {
   return false;
 };
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  INR: "₹", USD: "$", EUR: "€", GBP: "£", JPY: "¥",
+  AUD: "A$", CAD: "C$", AED: "د.إ", SAR: "﷼", SGD: "S$",
+  MYR: "RM", THB: "฿", LKR: "Rs", PKR: "₨", EGP: "E£",
+  TRY: "₺", CHF: "Fr", SEK: "kr", NOK: "kr", DKK: "kr",
+  PLN: "zł", CNY: "¥", HKD: "HK$", KRW: "₩", MXN: "Mex$",
+  NZD: "NZ$", ZAR: "R", BRL: "R$",
+};
+
+function formatCurrency(amount: number | undefined | null, currencyCode?: string): string {
+  const amt = amount ?? 0;
+  const code = currencyCode || "USD";
+  const symbol = CURRENCY_SYMBOLS[code] || code + " ";
+  if (amt >= 1e5) return `${symbol}${(amt / 1e5).toFixed(1)}L`;
+  if (amt >= 1e3) return `${symbol}${(amt / 1e3).toFixed(1)}K`;
+  return `${symbol}${amt.toLocaleString("en-IN")}`;
+}
+
 interface DayData {
   day: number;
   theme: string;
   morning?: string;
   afternoon?: string;
   evening?: string;
+  estimated_cost?: number;
+  budget_tip?: string;
 }
 
 interface ItineraryData {
   title?: string;
   total_estimated_cost?: number;
+  currency?: string;
   days?: DayData[];
+  tips?: string[];
 }
 
 interface ItineraryBoardProps {
@@ -125,8 +147,7 @@ function ItineraryBoard({ itinerary, warnings, duration_ms }: ItineraryBoardProp
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-full flex items-center gap-1.5">
-              <DollarSign className="h-3 w-3 text-orange-400" />
-              <span className="text-orange-400 font-bold text-sm">{itinerary?.total_estimated_cost || 0}</span>
+              <span className="text-orange-400 font-bold text-sm">{formatCurrency(itinerary?.total_estimated_cost, itinerary?.currency)}</span>
             </div>
             {duration_ms != null && (
               <div className="px-2.5 py-1 bg-zinc-800/60 border border-zinc-700/40 rounded-full flex items-center gap-1">
@@ -198,11 +219,40 @@ function ItineraryBoard({ itinerary, warnings, duration_ms }: ItineraryBoardProp
                       </div>
                     )}
                   </div>
+                  {day.estimated_cost != null && (
+                    <div className="mt-3 pt-2 border-t border-zinc-800/40 flex items-center justify-between">
+                      <span className="text-[11px] text-zinc-500">Day cost</span>
+                      <span className="text-[11px] text-orange-400/80 font-mono">{formatCurrency(day.estimated_cost, itinerary?.currency)}</span>
+                    </div>
+                  )}
+                  {day.budget_tip && (
+                    <div className="mt-1.5 flex items-start gap-1.5">
+                      <span className="text-[10px] text-emerald-500/70 shrink-0 mt-0.5">Tip:</span>
+                      <span className="text-[10px] text-zinc-500 leading-relaxed">{day.budget_tip}</span>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ))}
           </div>
         </div>
+
+        {/* Tips */}
+        {itinerary?.tips && itinerary.tips.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="mt-5 px-1"
+          >
+            <div className="text-[11px] text-zinc-500 font-medium mb-2">Tips</div>
+            <div className="flex flex-wrap gap-1.5">
+              {itinerary.tips.map((tip, i) => (
+                <span key={i} className="text-[11px] text-zinc-400 bg-zinc-800/40 px-2.5 py-1 rounded-full">{tip}</span>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Footer */}
         {warnings && warnings.length > 0 && (
