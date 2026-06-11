@@ -77,18 +77,24 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         fallback_currency = "USD"
         fallback_preferences = []
 
-        # Pattern 1: city at start of input — "dubai for 10 days", "Paris trip 3 days"
-        m = re.match(r'^([a-zA-Z][a-zA-Z\s,]+?)\s+(?:for|from|trip|tour|in|at)\b', raw, re.IGNORECASE)
+        # Pattern 1: explicit prepositions — "10 days in Dubai", "travel to London", "plan a trip to Dubai"
+        m = re.search(r'\b(?:in|to|visit|explore)\s+([a-zA-Z][a-zA-Z\s,]+?)(?:\s+for|\s+from|\s+at|\s*$)', raw, re.IGNORECASE)
         if m:
             fallback_dest = m.group(1).strip().title()
 
-        # Pattern 2: explicit prepositions — "10 days in Dubai", "travel to London"
+        # Pattern 2: city at start of input — "dubai for 10 days", "Paris trip 3 days"
         if not fallback_dest:
-            m = re.search(r'\b(?:in|to|visit|explore)\s+([a-zA-Z][a-zA-Z\s,]+?)(?:\s+for|\s+from|\s+at|\s*$)', raw, re.IGNORECASE)
+            m = re.match(r'^([a-zA-Z][a-zA-Z\s,]+?)\s+(?:for|from|trip|tour|in|at)\b', raw, re.IGNORECASE)
             if m:
                 fallback_dest = m.group(1).strip().title()
 
-        # Pattern 3: any word(s) that look like a place name (title-cased words)
+        # Pattern 3: "plan a trip to X", "plan X trip"
+        if not fallback_dest:
+            m = re.search(r'\b(?:trip|tour|travel|visit|go)\s+(?:to\s+)?([a-zA-Z][a-zA-Z\s,]+?)(?:\s+for|\s+from|\s+at|\s+with|\s*$)', raw, re.IGNORECASE)
+            if m:
+                fallback_dest = m.group(1).strip().title()
+
+        # Pattern 4: any word(s) that look like a place name (title-cased words)
         if not fallback_dest:
             m = re.search(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', raw)
             if m:
@@ -117,10 +123,15 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         # Detect "any budget" or "all places"
         if re.search(r'\b(?:any|unlimited|no\s+limit)\s+budget\b', raw, re.IGNORECASE):
             fallback_budget = 999999
-        # Try to extract explicit budget amount
+        # Try to extract explicit budget amount with currency
         m_budget = re.search(r'(\d[\d,]*)\s*(?:rupees|rs|inr|usd|\$|euros?|dollars?)\b', raw, re.IGNORECASE)
         if m_budget:
             fallback_budget = float(m_budget.group(1).replace(",", ""))
+        # Try to extract bare number near budget context
+        if not m_budget:
+            m_bare = re.search(r'\b(?:budget|spend|cost)\s*(?:of\s*)?(\d[\d,]*)\b', raw, re.IGNORECASE)
+            if m_bare:
+                fallback_budget = float(m_bare.group(1).replace(",", ""))
         if re.search(r'\b(?:visit|explore|see)\s+(?:all|every)\b', raw, re.IGNORECASE):
             fallback_preferences.append("visit all places")
 

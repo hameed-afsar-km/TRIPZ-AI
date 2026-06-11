@@ -19,28 +19,34 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         weather = {}
         transport = {}
         warnings = []
+        trace = state.get("execution_trace", [])
 
         for result in results:
             if isinstance(result, Exception):
                 warnings.append(f"Transit tool error: {str(result)}")
                 continue
             if isinstance(result, dict):
-                # Extract key fields
                 if "weather" in result:
                     weather = result["weather"]
                 if "transport" in result:
                     transport = result["transport"]
-                # Extract warnings or errors if any
                 if "error" in result:
                     warnings.append(f"Transit error: {result['error']}")
+                tool_trace = result.get("execution_trace", [])
+                if tool_trace:
+                    trace = tool_trace
 
         return {
             "weather": weather,
             "transport": transport,
+            "warnings": state.get("warnings", []) + warnings,
+            "execution_trace": trace + ["transit_agent"],
         }
     except Exception as e:
         return {
             "weather": {"error": str(e)},
             "transport": {},
+            "warnings": state.get("warnings", []) + [f"Transit agent error: {str(e)}"],
+            "execution_trace": state.get("execution_trace", []) + ["transit_agent:error"],
         }
 

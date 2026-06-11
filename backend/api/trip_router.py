@@ -1,5 +1,6 @@
 import json
 import asyncio
+import os
 import time
 import logging
 from typing import AsyncGenerator, Optional
@@ -21,7 +22,7 @@ router = APIRouter(prefix="/api/v1", tags=["trip"])
 class TripRequest(BaseModel):
     user_request: str = Field(..., min_length=5)
     stream: bool = Field(default=True)
-    provider: str = Field(default="ollama")
+    provider: str = Field(default="groq")
     api_key: Optional[str] = Field(default=None)
     session_id: Optional[str] = Field(default=None)
     agent_providers: Optional[dict] = Field(default=None)
@@ -56,15 +57,17 @@ async def plan_trip_stream(request: TripRequest):
         initial_state = {
             "user_request": request.user_request,
             "provider": request.provider,
-            "api_key": request.api_key,
+            "api_key": request.api_key or os.getenv("GROQ_API_KEY"),
             "agent_providers": request.agent_providers or {},
             "replan_count": 0,
             "warnings": [],
             "execution_trace": [],
             "needs_replanning": False,
+            "confidence_score": 0.0,
+            "replan_instructions": "",
         }
         if prev:
-            initial_state["previous_context"] = prev.get("itinerary", {})
+            initial_state["previous_context"] = prev
 
         logger.info("")
         logger.info("  ═══════════════════════════════════════════")
@@ -271,15 +274,17 @@ async def plan_trip(request: TripRequest) -> TripResponse:
     initial_state = {
         "user_request": request.user_request,
         "provider": request.provider,
-        "api_key": request.api_key,
+        "api_key": request.api_key or os.getenv("GROQ_API_KEY"),
         "agent_providers": request.agent_providers or {},
         "replan_count": 0,
         "warnings": [],
         "execution_trace": [],
         "needs_replanning": False,
+        "confidence_score": 0.0,
+        "replan_instructions": "",
     }
     if prev:
-        initial_state["previous_context"] = prev.get("itinerary", {})
+        initial_state["previous_context"] = prev
 
     result = await trip_graph.ainvoke(initial_state)
     duration_ms = (time.time() - start_time) * 1000

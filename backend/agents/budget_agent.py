@@ -12,6 +12,7 @@ async def budget_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         budget = float(state.get("budget", 0))
         travelers = int(state.get("num_travelers", 1))
         is_unlimited = budget >= 999999
+        trace = state.get("execution_trace", [])
 
         warnings: list = []
 
@@ -20,6 +21,9 @@ async def budget_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             try:
                 hotel_res = await hotel_tool(state)
                 hotels = hotel_res.get("hotels", [])
+                tool_trace = hotel_res.get("execution_trace", [])
+                if tool_trace:
+                    trace = tool_trace
             except Exception:
                 warnings.append("Hotel data unavailable — budget cannot verify accommodation costs.")
 
@@ -31,10 +35,10 @@ async def budget_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         has_transport_cost = isinstance(transport.get("distance_km"), (int, float))
 
         if not has_hotel_prices and hotels:
-            warnings.append("Hotel prices not available from free APIs. Only hotel names and star ratings are shown.")
+            warnings.append("Hotel prices unavailable for this destination. Try a more specific hotel name.")
 
         if not has_activity_costs and activities:
-            warnings.append("Activity costs not available from free APIs. Only venue names and categories are shown.")
+            warnings.append("Activity costs unavailable — free activities suggested.")
 
         if not has_transport_cost and "distance_km" in transport:
             warnings.append("Transport distance calculated but no real-time pricing available.")
@@ -46,16 +50,19 @@ async def budget_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "hotels_found": len(hotels),
             "activities_found": len(activities),
             "transport_distance_km": transport.get("distance_km"),
-            "note": "Real-time prices are not available from free APIs. "
-                    "Connect a live pricing API (e.g., Amadeus, Booking.com) to get accurate cost estimates.",
+            "note": "Hotel prices from Google Hotels (SerpAPI). Activity and transport costs are estimates.",
         }
 
         return {
             "budget_breakdown": budget_breakdown,
             "hotels": hotels,
+            "warnings": state.get("warnings", []) + warnings,
+            "execution_trace": trace + ["budget_agent"],
         }
     except Exception as e:
         return {
             "budget_breakdown": {"error": str(e)},
             "hotels": [],
+            "warnings": state.get("warnings", []) + [f"Budget agent error: {str(e)}"],
+            "execution_trace": state.get("execution_trace", []) + ["budget_agent:error"],
         }

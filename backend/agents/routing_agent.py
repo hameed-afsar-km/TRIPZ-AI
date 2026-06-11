@@ -58,19 +58,21 @@ async def routing_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         timeout=60,
     )
 
+    trace = state.get("execution_trace", [])
+
     if "error" in result:
         return {
             "routing_decision": "standard",
-            "warnings": [f"Routing LLM failed ({result.get('error')}). Defaulting to standard."],
-            "execution_trace": [f"routing_agent:fallback"],
+            "warnings": state.get("warnings", []) + [f"Routing LLM failed ({result.get('error')}). Defaulting to standard."],
+            "execution_trace": trace + ["routing_agent:fallback"],
         }
 
     trip_type = result.get("trip_type")
     if trip_type not in ("standard", "budget", "luxury"):
         return {
             "routing_decision": "standard",
-            "warnings": [f"Routing returned invalid trip_type '{trip_type}'. Defaulting to standard."],
-            "execution_trace": [f"routing_agent:fallback"],
+            "warnings": state.get("warnings", []) + [f"Routing returned invalid trip_type '{trip_type}'. Defaulting to standard."],
+            "execution_trace": trace + ["routing_agent:fallback"],
         }
 
-    return {"routing_decision": trip_type, "execution_trace": [f"routing_agent"]}
+    return {"routing_decision": trip_type, "execution_trace": trace + ["routing_agent"]}

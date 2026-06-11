@@ -220,10 +220,13 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     hotel_data = [{k: h.get(k) for k in ("name","stars","type") if k in h} for h in hotels[:2]]
 
     # Attempt to enrich hotels with live pricing
+    travel_dates = state.get("travel_dates", {})
+    chk_in = travel_dates.get("start", "2026-07-01")
+    chk_out = travel_dates.get("end", "2026-07-02")
     for h in hotels[:2]:
         name = h.get("name", "")
         if name and name not in _HOTEL_PRICE_CACHE:
-            price = await get_hotel_price(name, destination, currency)
+            price = await get_hotel_price(name, destination, currency, chk_in, chk_out)
             if price is not None:
                 _HOTEL_PRICE_CACHE[name] = price
                 h["price_per_night"] = price

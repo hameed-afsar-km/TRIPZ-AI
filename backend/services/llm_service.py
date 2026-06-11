@@ -61,7 +61,7 @@ def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, exp
     elif provider == "groq":
         kwargs = {"model": "llama-3.3-70b-versatile", "temperature": temperature, "api_key": key}
         if expect_json:
-            kwargs["response_format"] = {"type": "json_object"}
+            kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
         return ChatGroq(**kwargs)
     elif provider == "anthropic":
         return ChatAnthropic(model="claude-3-haiku-20240307", temperature=temperature, api_key=key)
@@ -79,7 +79,7 @@ def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, exp
             "model": "qwen2.5:1.5b",
             "temperature": temperature,
             "base_url": "http://localhost:11434",
-            "num_predict": 800,
+            "num_predict": 4096,
             "client_kwargs": {"timeout": 300},
             "async_client_kwargs": {"timeout": 300},
         }
@@ -196,6 +196,8 @@ def _try_fix_json(raw: str) -> str:
     raw = raw.strip()
     raw = re.sub(r',\s*}', '}', raw)
     raw = re.sub(r',\s*]', ']', raw)
+    raw = re.sub(r"(?<=[{,\s])'(?=\w)", '"', raw)
+    raw = re.sub(r"(?<=\w)'(?=[},\s])", '"', raw)
     raw = re.sub(r"(?<!\\)'", '"', raw)
 
     def _fix_keys(m: re.Match) -> str:

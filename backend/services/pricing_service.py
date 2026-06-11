@@ -1,10 +1,13 @@
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
+from services.serpapi_service import search_hotels
+
 logger = logging.getLogger("tripz.agents")
 
+_SERPAPI_DEST_CACHE: Dict[str, List[Dict[str, Any]]] = {}
 _XOTELO_CACHE: dict[str, float] = {}
 
 
@@ -12,13 +15,37 @@ async def get_hotel_price(
     hotel_name: str,
     destination: str,
     currency: str = "USD",
+    chk_in: str = "2026-07-01",
+    chk_out: str = "2026-07-02",
 ) -> Optional[float]:
-    """Try to get a real hotel price from Xotelo's free API (no key required)."""
+    cache_key = f"{destination.lower().strip()}:{chk_in}:{chk_out}:{currency}"
+    if cache_key not in _SERPAPI_DEST_CACHE:
+        serp_results = await search_hotels(destination, chk_in, chk_out, currency)
+        _SERPAPI_DEST_CACHE[cache_key] = serp_results
+    else:
+        serp_results = _SERPAPI_DEST_CACHE[cache_key]
+
+    for h in serp_results:
+        if hotel_name.lower() in h.get("name", "").lower() or h.get("name", "").lower() in hotel_name.lower():
+            price = h.get("price_per_night")
+            if price is not None:
+                return float(price)
+
+    return await _xotelo_fallback(hotel_name, destination, currency, chk_in, chk_out)
+
+
+async def _xotelo_fallback(
+    hotel_name: str,
+    destination: str,
+    currency: str = "USD",
+    chk_in: str = "2026-07-01",
+    chk_out: str = "2026-07-02",
+) -> Optional[float]:
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             loc_resp = await client.get(
                 "https://data.xotelo.com/api/list",
-                params={"chk_in": "2026-07-01", "chk_out": "2026-07-02", "currency": currency},
+                params={"chk_in": chk_in, "chk_out": chk_out, "currency": currency},
             )
             if loc_resp.status_code != 200:
                 return None
@@ -36,8 +63,8 @@ async def get_hotel_price(
                             "https://data.xotelo.com/api/rates",
                             params={
                                 "hotel_key": hotel_key,
-                                "chk_in": "2026-07-01",
-                                "chk_out": "2026-07-02",
+                                "chk_in": chk_in,
+                                "chk_out": chk_out,
                                 "currency": currency,
                             },
                         )

@@ -8,6 +8,7 @@ async def curator_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     Uses the activity tool and structures results into the state.
     """
     result = await activity_tool(state)
+    trace = state.get("execution_trace", [])
     
     activities = []
     warnings = []
@@ -15,9 +16,15 @@ async def curator_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(result, dict):
         if "activities" in result:
             activities = result["activities"]
-        # Extract warnings or errors if any
         if "error" in result:
             warnings.append(f"Curator error: {result['error']}")
+        tool_trace = result.get("execution_trace", [])
+        if tool_trace:
+            trace = tool_trace
         
-    return {"activities": activities}
+    return {
+        "activities": activities,
+        "warnings": state.get("warnings", []) + warnings,
+        "execution_trace": trace + ["curator_agent"],
+    }
 

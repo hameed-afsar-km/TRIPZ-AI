@@ -55,7 +55,7 @@ async def weather_tool(state: Dict[str, Any]) -> Dict[str, Any]:
                         params={
                             "latitude": lat,
                             "longitude": lon,
-                            "daily": "weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max",
+                            "daily": "weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max",
                             "timezone": tz,
                             "forecast_days": 7,
                         },
@@ -75,7 +75,7 @@ async def weather_tool(state: Dict[str, Any]) -> Dict[str, Any]:
                         "temp_max_c": daily["temperature_2m_max"][i],
                         "temp_min_c": daily["temperature_2m_min"][i],
                         "precipitation_mm": daily["precipitation_sum"][i],
-                        "wind_kmh": daily["windspeed_10m_max"][i],
+                        "wind_kmh": daily["wind_speed_10m_max"][i],
                         "is_bad_weather": code >= 61,   # Rain, snow, thunderstorm
                     })
 
