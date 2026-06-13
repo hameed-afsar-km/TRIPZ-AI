@@ -12,6 +12,10 @@ class TripState(TypedDict, total=False):
     travel_dates: Dict[str, str]
     duration_days: int
     num_travelers: int
+    adults: int
+    kids: int
+    infants: int
+    trip_style: str  # "standard" | "budget" | "luxury" — preselected from UI
     preferences: List[str]
     previous_context: Optional[Dict[str, Any]]
 

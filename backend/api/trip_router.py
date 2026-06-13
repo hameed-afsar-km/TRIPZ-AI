@@ -26,6 +26,10 @@ class TripRequest(BaseModel):
     api_key: Optional[str] = Field(default=None)
     session_id: Optional[str] = Field(default=None)
     agent_providers: Optional[dict] = Field(default=None)
+    adults: int = Field(default=1, ge=1)
+    kids: int = Field(default=0, ge=0)
+    infants: int = Field(default=0, ge=0)
+    trip_style: str = Field(default="")  # "standard" | "budget" | "luxury" from UI
 
 
 class TripResponse(BaseModel):
@@ -54,11 +58,17 @@ async def plan_trip_stream(request: TripRequest):
         if request.session_id:
             prev = await session_memory.load(request.session_id)
 
+        travelers = request.adults + request.kids + request.infants
         initial_state = {
             "user_request": request.user_request,
             "provider": request.provider,
             "api_key": request.api_key or os.getenv("GROQ_API_KEY"),
             "agent_providers": request.agent_providers or {},
+            "adults": request.adults,
+            "kids": request.kids,
+            "infants": request.infants,
+            "num_travelers": travelers,
+            "trip_style": request.trip_style,
             "replan_count": 0,
             "warnings": [],
             "execution_trace": [],
@@ -73,6 +83,7 @@ async def plan_trip_stream(request: TripRequest):
         logger.info("  ═══════════════════════════════════════════")
         logger.info("  🚀 TRIPZ AGENTS LAUNCHED")
         logger.info("     Request: %s", request.user_request)
+        logger.info("     Travelers: %d (%d adults, %d kids, %d infants)", travelers, request.adults, request.kids, request.infants)
         logger.info("  ═══════════════════════════════════════════")
         logger.info("")
         yield _sse("start", {"message": "TRIPZ agents initializing...", "request": request.user_request})
@@ -117,7 +128,7 @@ async def plan_trip_stream(request: TripRequest):
 
             async def collect():
                 nonlocal graph_done
-                deadline = asyncio.get_event_loop().time() + 170
+                deadline = asyncio.get_event_loop().time() + 220
                 try:
                     ait = trip_graph.astream_events(initial_state)
                     while True:
@@ -271,11 +282,17 @@ async def plan_trip(request: TripRequest) -> TripResponse:
     if request.session_id:
         prev = await session_memory.load(request.session_id)
 
+    travelers = request.adults + request.kids + request.infants
     initial_state = {
         "user_request": request.user_request,
         "provider": request.provider,
         "api_key": request.api_key or os.getenv("GROQ_API_KEY"),
         "agent_providers": request.agent_providers or {},
+        "adults": request.adults,
+        "kids": request.kids,
+        "infants": request.infants,
+        "num_travelers": travelers,
+        "trip_style": request.trip_style,
         "replan_count": 0,
         "warnings": [],
         "execution_trace": [],
@@ -311,10 +328,12 @@ async def health():
 def _agent_label(name: str) -> str:
     labels = {
         "supervisor_agent": "Parsing your travel request...",
-        "budget_agent":     "Calculating budget allocation & hotel options...",
-        "transit_agent":    "Fetching transit & weather options...",
-        "curator_agent":    "Curating top destination activities...",
-        "itinerary_agent":  "Synthesizing your personalized itinerary...",
+        "routing_agent":    "Determining trip style...",
+        "budget_agent":     "Calculating budget & hotel options...",
+        "transit_agent":    "Checking weather & transport...",
+        "curator_agent":    "Curating top activities & viewpoints...",
+        "itinerary_agent":  "Crafting your day-by-day itinerary...",
+        "critic_agent":     "Reviewing & validating your trip...",
         "clarify_node":     "Request needs clarification...",
     }
     return labels.get(name, f"Running {name}...")

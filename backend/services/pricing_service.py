@@ -8,7 +8,38 @@ from services.serpapi_service import search_hotels
 logger = logging.getLogger("tripz.agents")
 
 _SERPAPI_DEST_CACHE: Dict[str, List[Dict[str, Any]]] = {}
+_SERPAPI_AVG_CACHE: Dict[str, float] = {}
 _XOTELO_CACHE: dict[str, float] = {}
+
+
+def _average_price(results: List[Dict[str, Any]]) -> Optional[float]:
+    prices = [r["price_per_night"] for r in results if r.get("price_per_night") is not None]
+    if not prices:
+        return None
+    prices.sort()
+    n = len(prices)
+    median = prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2
+    return round(median, 2)
+
+
+async def get_destination_avg_price(
+    destination: str,
+    currency: str = "USD",
+    chk_in: str = "2026-07-01",
+    chk_out: str = "2026-07-02",
+) -> Optional[float]:
+    cache_key = f"{destination.lower().strip()}:{chk_in}:{chk_out}:{currency}"
+    if cache_key in _SERPAPI_AVG_CACHE:
+        return _SERPAPI_AVG_CACHE[cache_key]
+    if cache_key not in _SERPAPI_DEST_CACHE:
+        serp_results = await search_hotels(destination, chk_in, chk_out, currency)
+        _SERPAPI_DEST_CACHE[cache_key] = serp_results
+    else:
+        serp_results = _SERPAPI_DEST_CACHE[cache_key]
+    avg = _average_price(serp_results)
+    if avg is not None:
+        _SERPAPI_AVG_CACHE[cache_key] = avg
+    return avg
 
 
 async def get_hotel_price(
@@ -31,7 +62,12 @@ async def get_hotel_price(
             if price is not None:
                 return float(price)
 
-    return await _xotelo_fallback(hotel_name, destination, currency, chk_in, chk_out)
+    xotelo = await _xotelo_fallback(hotel_name, destination, currency, chk_in, chk_out)
+    if xotelo is not None:
+        return xotelo
+
+    avg = _average_price(serp_results)
+    return avg
 
 
 async def _xotelo_fallback(

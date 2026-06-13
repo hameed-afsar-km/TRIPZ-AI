@@ -8,6 +8,10 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     Transit Agent: Executes the weather and transport gathering in parallel.
     Consolidates transport options and weather details into the state.
     """
+    trace = state.get("execution_trace", [])
+    if state.get("weather") and state.get("transport"):
+        return {"execution_trace": trace + ["transit_agent:from_cache"]}
+
     try:
         # Execute both tools concurrently
         results = await asyncio.gather(

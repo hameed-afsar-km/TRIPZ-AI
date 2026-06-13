@@ -442,13 +442,19 @@ const CustomDivider: React.FC = () => (
 
 // Main PromptInputBox Component
 interface PromptInputBoxProps {
-  onSend?: (message: string, files?: File[], provider?: string, apiKey?: string) => void;
+  onSend?: (message: string, files?: File[], provider?: string, apiKey?: string, agentProviders?: Record<string, string>, adults?: number, kids?: number, infants?: number, tripStyle?: string) => void;
   onStop?: () => void;
   isLoading?: boolean;
   placeholder?: string;
   className?: string;
   showHistory?: boolean;
   onHistoryToggle?: () => void;
+  adults?: number;
+  kids?: number;
+  infants?: number;
+  tripStyle?: string;
+  onTravelersChange?: (adults: number, kids: number, infants: number) => void;
+  onTripStyleChange?: (style: string) => void;
 }
 export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref: React.Ref<HTMLDivElement>) => {
   const { onSend = () => {}, onStop = () => {}, isLoading = false, placeholder = "Type your message here...", className, showHistory = false, onHistoryToggle = () => {} } = props;
@@ -457,6 +463,10 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   const [filePreviews, setFilePreviews] = React.useState<{ [key: string]: string }>({});
   const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
   const [isRecording, setIsRecording] = React.useState(false);
+  const [adults, setAdults] = React.useState(props.adults ?? 1);
+  const [kids, setKids] = React.useState(props.kids ?? 0);
+  const [infants, setInfants] = React.useState(props.infants ?? 0);
+  const [tripStyle, setTripStyle] = React.useState(props.tripStyle || "");
   
   // Settings State
   const [showSettings, setShowSettings] = React.useState(false);
@@ -546,9 +556,24 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
     return () => document.removeEventListener("paste", handlePaste);
   }, [handlePaste]);
 
+  React.useEffect(() => {
+    setAdults(props.adults ?? 1);
+    setKids(props.kids ?? 0);
+    setInfants(props.infants ?? 0);
+  }, [props.adults, props.kids, props.infants]);
+
+  const handleTravelersChange = (type: "adults" | "kids" | "infants", delta: number) => {
+    let a = adults, k = kids, i = infants;
+    if (type === "adults") a = Math.max(1, a + delta);
+    else if (type === "kids") k = Math.max(0, k + delta);
+    else if (type === "infants") i = Math.max(0, i + delta);
+    setAdults(a); setKids(k); setInfants(i);
+    props.onTravelersChange?.(a, k, i);
+  };
+
   const handleSubmit = () => {
     if (input.trim() || files.length > 0) {
-      onSend(input, files, provider, apiKey);
+      onSend(input, files, provider, apiKey, undefined, adults, kids, infants, tripStyle);
       setInput("");
       setFiles([]);
       setFilePreviews({});
@@ -560,7 +585,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   const handleStopRecording = (duration: number) => {
     console.log(`Stopped recording after ${duration} seconds`);
     setIsRecording(false);
-    onSend(`[Voice message - ${duration} seconds]`, []);
+    onSend(`[Voice message - ${duration} seconds]`, [], provider, apiKey, undefined, adults, kids, infants, tripStyle);
   };
 
   const hasContent = input.trim() !== "" || files.length > 0;
@@ -635,6 +660,82 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
             onStartRecording={handleStartRecording}
             onStopRecording={handleStopRecording}
           />
+        )}
+
+        {/* Travelers selector */}
+        {!isRecording && (
+          <div className="flex items-center gap-3 px-1 py-1.5">
+            <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Travelers</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-zinc-400 w-9">Adults</span>
+                <button
+                  onClick={() => handleTravelersChange("adults", -1)}
+                  disabled={adults <= 1}
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed text-xs transition-all"
+                >−</button>
+                <span className="text-xs text-white font-medium w-4 text-center">{adults}</span>
+                <button
+                  onClick={() => handleTravelersChange("adults", 1)}
+                  disabled={adults >= 9}
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed text-xs transition-all"
+                >+</button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-zinc-400 w-7">Kids</span>
+                <button
+                  onClick={() => handleTravelersChange("kids", -1)}
+                  disabled={kids <= 0}
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed text-xs transition-all"
+                >−</button>
+                <span className="text-xs text-white font-medium w-4 text-center">{kids}</span>
+                <button
+                  onClick={() => handleTravelersChange("kids", 1)}
+                  disabled={kids >= 9}
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed text-xs transition-all"
+                >+</button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-zinc-400 w-12">Infants</span>
+                <button
+                  onClick={() => handleTravelersChange("infants", -1)}
+                  disabled={infants <= 0}
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed text-xs transition-all"
+                >−</button>
+                <span className="text-xs text-white font-medium w-4 text-center">{infants}</span>
+                <button
+                  onClick={() => handleTravelersChange("infants", 1)}
+                  disabled={infants >= 9}
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed text-xs transition-all"
+                >+</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trip Style selector */}
+        {!isRecording && (
+          <div className="flex items-center gap-3 px-1 py-1.5">
+            <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Style</span>
+            <div className="flex items-center gap-1.5">
+              {["standard", "budget", "luxury"].map((style) => (
+                <button
+                  key={style}
+                  onClick={() => {
+                    setTripStyle(style);
+                    props.onTripStyleChange?.(style);
+                  }}
+                  className={`text-[11px] px-2.5 py-1 rounded-full border transition-all ${
+                    tripStyle === style
+                      ? "bg-orange-500/20 border-orange-400/50 text-orange-300"
+                      : "bg-zinc-800/40 border-zinc-700/40 text-zinc-400 hover:border-zinc-600"
+                  }`}
+                >
+                  {style === "standard" ? "Standard" : style === "budget" ? "Budget" : "Luxury"}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         <PromptInputActions className="flex items-center justify-between gap-2 p-0 pt-2">

@@ -20,7 +20,7 @@ import {
   Moon,
   Sunrise,
   Clock,
-  Navigation
+  Navigation,
 } from "lucide-react";
 
 interface AgentMessage {
@@ -55,6 +55,97 @@ const formatErrorForDisplay = (type: string, message?: string): string => {
   }
   return message || "An unexpected error occurred.";
 };
+
+const AGENT_STATUS_MESSAGES: Record<string, string[]> = {
+  supervisor_agent: [
+    "Parsing your travel request...",
+    "Understanding your preferences...",
+    "Extracting destinations & dates...",
+  ],
+  routing_agent: [
+    "Determining your travel style...",
+    "Classifying trip type...",
+  ],
+  transit_agent: [
+    "Checking weather conditions...",
+    "Finding best transport options...",
+    "Calculating travel distances...",
+    "Making sure the travel is suitable...",
+  ],
+  budget_agent: [
+    "Scouting hotel prices...",
+    "Estimating daily costs...",
+    "Planning your budget allocation...",
+  ],
+  curator_agent: [
+    "Curating the best viewpoints...",
+    "Discovering hidden gems...",
+    "Finding top attractions...",
+    "Selecting must-visit spots...",
+  ],
+  itinerary_agent: [
+    "Crafting your perfect day-by-day plan...",
+    "Optimizing your schedule...",
+    "Balancing activities & relaxation...",
+    "Making sure everything fits your budget...",
+  ],
+  critic_agent: [
+    "Reviewing itinerary quality...",
+    "Checking budget compliance...",
+    "Validating day-by-day flow...",
+  ],
+};
+
+function useCyclingMessages(agentKey: string | undefined, intervalMs = 3000): string {
+  const messages = agentKey ? AGENT_STATUS_MESSAGES[agentKey] : undefined;
+  const [index, setIndex] = React.useState(0);
+  React.useEffect(() => {
+    if (!messages || messages.length <= 1) return;
+    const timer = setInterval(() => setIndex((i) => (i + 1) % messages.length), intervalMs);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentKey, intervalMs]);
+  if (!messages || messages.length === 0) return "Working on it...";
+  return messages[index % messages.length];
+}
+
+function TypingMessageInner({ message, className }: { message: string; className?: string }) {
+  const [displayed, setDisplayed] = React.useState("");
+  const [showCursor, setShowCursor] = React.useState(true);
+  const indexRef = React.useRef(0);
+
+  React.useEffect(() => {
+    indexRef.current = 0;
+    setDisplayed("");
+  }, [message]);
+
+  React.useEffect(() => {
+    if (indexRef.current < message.length) {
+      const timer = setTimeout(() => {
+        setDisplayed(message.slice(0, indexRef.current + 1));
+        indexRef.current += 1;
+      }, 25);
+      return () => clearTimeout(timer);
+    }
+  }, [displayed, message]);
+
+  React.useEffect(() => {
+    const cursor = setInterval(() => setShowCursor((c) => !c), 530);
+    return () => clearInterval(cursor);
+  }, []);
+
+  return (
+    <span className={className}>
+      {displayed}
+      <span className={`text-orange-400/70 ${showCursor ? "opacity-100" : "opacity-0"}`}>|</span>
+    </span>
+  );
+}
+
+function TypingMessage({ agentKey, className }: { agentKey: string; className?: string }) {
+  const message = useCyclingMessages(agentKey, 2800);
+  return <TypingMessageInner key={message} message={message} className={className} />;
+}
 
 const isTripRelated = (text: string): boolean => {
   const normalized = text.toLowerCase().trim();
@@ -281,6 +372,22 @@ export default function Home() {
   const [itineraryResult, setItineraryResult] = useState<any>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [streamingTokens, setStreamingTokens] = useState<string>("");
+  const [currentAgentKey, setCurrentAgentKey] = useState<string>("");
+
+  // Travelers state
+  const [travelers, setTravelers] = useState({ adults: 1, kids: 0, infants: 0 });
+  const travelersRef = useRef({ adults: 1, kids: 0, infants: 0 });
+  const lastTravelersRef = useRef({ adults: 1, kids: 0, infants: 0 });
+
+  // Trip style state
+  const [tripStyle, setTripStyle] = useState("");
+
+  // Regeneration confirmation modal
+  const [showRegenModal, setShowRegenModal] = useState(false);
+  const [pendingSend, setPendingSend] = useState<{
+    msg: string; files?: File[]; provider: string; apiKey: string; agentProviders: Record<string, string>;
+    adults: number; kids: number; infants: number; tripStyle: string;
+  } | null>(null);
 
   // Session / History state
   const [sessionId] = useState(() =>
@@ -312,7 +419,7 @@ export default function Home() {
     mouseY.set(y);
   };
 
-  const runAgentSimulation = async (userInput: string, provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}) => {
+  const runAgentSimulation = async (userInput: string, provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -351,6 +458,10 @@ export default function Home() {
           api_key: apiKey,
           agent_providers: Object.keys(agentProviders).length > 0 ? agentProviders : undefined,
           session_id: sessionId,
+          adults: adults,
+          kids: kids,
+          infants: infants,
+          trip_style: tripStyle,
         }),
         signal: controller.signal,
       });
@@ -395,6 +506,7 @@ export default function Home() {
                 } else if (eventType === "agent_start") {
                   setStreamingTokens("");
                   setSimulationStage("agents");
+                  setCurrentAgentKey(data.agent);
                   const mapped = AGENT_MAP[data.agent] || { name: "Planner" as const, step: 0 };
                   setActiveStep(mapped.step);
                   setSimulationLogs(prev => {
@@ -447,6 +559,9 @@ export default function Home() {
                   setActiveStep(4);
                   setSimulationStage("done");
                   setIsProcessing(false);
+                  if (!data.error_type) {
+                    lastTravelersRef.current = { ...travelersRef.current };
+                  }
                 } else if (eventType === "error") {
                   setStreamingTokens("");
                   const errorMapped = AGENT_MAP[data.agent] || { name: "Planner" as const, step: 0 };
@@ -477,7 +592,8 @@ export default function Home() {
             timestamp: new Date().toLocaleTimeString(),
             isError: true,
           }]);
-          setValidationError("The request took too long. Check that Ollama is running (default: qwen2.5:1.5b) or try a different provider in Settings.");
+          const providerName = provider === "ollama" ? "Ollama (qwen2.5:1.5b)" : provider;
+          setValidationError(`The request took too long with ${providerName}. Check that your provider is running and the API key is correct, or try a different provider in Settings.`);
           setIsProcessing(false);
           setSimulationStage("done");
         }
@@ -502,14 +618,27 @@ export default function Home() {
     }
   };
 
-  const handleSend = (msg: string, files?: File[], provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}) => {
+  const handleSend = (msg: string, files?: File[], provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
     if (!msg || msg.trim() === "") return;
     if (!isTripRelated(msg)) {
       setValidationError("Please type a request related to trip planning (e.g., '3 days in Tokyo', 'Paris budget route', or 'explore Rome').");
       return;
     }
     setValidationError(null);
-    runAgentSimulation(msg, provider, apiKey, agentProviders);
+
+    // Check if travelers changed and there's an existing itinerary
+    const last = lastTravelersRef.current;
+    const changed = last.adults !== adults || last.kids !== kids || last.infants !== infants;
+    if (changed && simulationStage === "done" && itineraryResult) {
+      setPendingSend({ msg, files, provider, apiKey, agentProviders, adults, kids, infants, tripStyle });
+      setShowRegenModal(true);
+      return;
+    }
+
+    lastTravelersRef.current = { adults, kids, infants };
+    travelersRef.current = { adults, kids, infants };
+    setTravelers({ adults, kids, infants });
+    runAgentSimulation(msg, provider, apiKey, agentProviders, adults, kids, infants, tripStyle);
   };
 
   const handleStop = () => {
@@ -757,16 +886,14 @@ export default function Home() {
                             <span className="text-zinc-600 italic">Pending</span>
                           ) : isActive ? (
                             <div className="flex flex-col gap-1 h-full overflow-hidden">
-                              <span className="text-orange-400 font-semibold animate-pulse shrink-0">Generating</span>
+                              <span className="text-orange-400/80 text-[11px] md:text-[12px] leading-relaxed font-mono">
+                                <TypingMessage agentKey={currentAgentKey} />
+                              </span>
                               {streamingTokens ? (
-                                <span className="text-zinc-500 text-[10px] md:text-[11px] leading-normal mt-1 overflow-y-auto line-clamp-6 break-words">
+                                <span className="text-zinc-500 text-[10px] md:text-[11px] leading-normal mt-1 overflow-y-auto line-clamp-3 break-words">
                                   {streamingTokens}
                                 </span>
-                              ) : (
-                                <span className="text-zinc-500 line-clamp-3 text-[10px] md:text-[11px] leading-normal mt-1">
-                                  {logs.length > 0 ? logs[logs.length - 1].text : "thinking..."}
-                                </span>
-                              )}
+                              ) : null}
                             </div>
                           ) : (
                             <div className="flex flex-col gap-1">
@@ -868,6 +995,12 @@ export default function Home() {
             placeholder="Plan a route or state coordinates..."
             showHistory={showHistory}
             onHistoryToggle={handleHistoryToggle}
+            adults={travelers.adults}
+            kids={travelers.kids}
+            infants={travelers.infants}
+            tripStyle={tripStyle}
+            onTravelersChange={(a, k, i) => setTravelers({ adults: a, kids: k, infants: i })}
+            onTripStyleChange={(s) => setTripStyle(s)}
           />
           <div className="text-[10px] text-white-500 text-center mt-3 flex items-center justify-center gap-1 opacity-70">
             <Sparkles className="h-3 w-3 text-orange-500" />
@@ -875,6 +1008,44 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Regeneration confirmation modal */}
+      {showRegenModal && pendingSend && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1F2023] border border-[#333333] rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-lg font-semibold text-white mb-3">Travelers Changed</h3>
+            <p className="text-sm text-zinc-400 mb-6">
+              The number of travelers changed from {lastTravelersRef.current.adults}A {lastTravelersRef.current.kids}K {lastTravelersRef.current.infants}I to {pendingSend.adults}A {pendingSend.kids}K {pendingSend.infants}I.
+              Regenerate the trip with the new traveler count?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowRegenModal(false);
+                  setPendingSend(null);
+                }}
+                className="px-4 py-2 text-sm text-zinc-400 bg-zinc-800/60 hover:bg-zinc-700/60 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowRegenModal(false);
+                  const p = pendingSend!;
+                  lastTravelersRef.current = { adults: p.adults, kids: p.kids, infants: p.infants };
+                  travelersRef.current = { adults: p.adults, kids: p.kids, infants: p.infants };
+                  setTravelers({ adults: p.adults, kids: p.kids, infants: p.infants });
+                  setPendingSend(null);
+                  runAgentSimulation(p.msg, p.provider, p.apiKey, p.agentProviders, p.adults, p.kids, p.infants, p.tripStyle);
+                }}
+                className="px-4 py-2 text-sm text-white bg-orange-600 hover:bg-orange-500 rounded-xl transition-all"
+              >
+                Regenerate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

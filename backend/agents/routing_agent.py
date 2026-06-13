@@ -27,6 +27,18 @@ Return JSON:
 
 
 async def routing_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    trace = state.get("execution_trace", [])
+    if state.get("routing_decision"):
+        return {"execution_trace": trace + ["routing_agent:from_cache"]}
+
+    # If user preselected trip_style from UI, use it directly — skip LLM
+    preselected = state.get("trip_style", "")
+    if preselected in ("standard", "budget", "luxury"):
+        return {
+            "routing_decision": preselected,
+            "execution_trace": trace + ["routing_agent:preselected"],
+        }
+
     request = state.get("user_request", "")
     destination = state.get("destination", "Unknown")
     origin = state.get("origin", "Unknown")

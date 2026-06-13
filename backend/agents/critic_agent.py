@@ -72,6 +72,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         system=CRITIC_SYSTEM,
         provider=resolve_provider(state, "critic"),
         api_key=state.get("api_key"),
+        retries=0,
         timeout=30,
     )
 

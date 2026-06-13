@@ -59,7 +59,7 @@ async def search_hotels(
                         rate = float(rate)
                     except (ValueError, TypeError):
                         rate = None
-                stars_raw = p.get("stars")
+                stars_raw = p.get("extracted_hotel_class")
                 if stars_raw is not None:
                     try:
                         stars = int(stars_raw)
@@ -67,7 +67,7 @@ async def search_hotels(
                         stars = None
                 else:
                     stars = None
-                rating = p.get("rating")
+                rating = p.get("overall_rating")
                 if rating is not None:
                     try:
                         rating = float(rating)

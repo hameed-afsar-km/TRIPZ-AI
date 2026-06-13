@@ -3,7 +3,7 @@ from typing import Any, Dict
 from services.llm_service import call_llm_json, resolve_provider
 
 SUPERVISOR_SYSTEM = """You are a travel request parser. Extract ALL details from the user's request.
-- Extract destination, origin, duration in days, budget, number of travelers, preferences
+- Extract destination, origin, duration in days, budget, travelers breakdown, preferences
 - ONLY use 999999 for budget if the user explicitly says "any budget" or "no limit". Otherwise use the exact number stated.
 - Infer currency from origin (India→INR, USA→USD, etc.) or from explicit mentions like "rupees" (→INR)
 - Capture preferences like "visit all places", "culture", "adventure", etc.
@@ -18,12 +18,16 @@ Analyze and extract:
 3. Trip duration in DAYS (count "10 days" as 10, "a week" as 7, etc.)
 4. Total budget (use the EXACT number stated; ONLY use 999999 if user says "any budget" or "no limit"; if no number at all, default to 3000)
 5. Currency (INR if from/in India or "rupees" mentioned, USD otherwise; infer from origin if possible)
-6. Number of travelers (default 1)
+6. Number of travelers breakdown:
+   - adults: number of adults (default 1, minimum 1)
+   - kids: number of children (default 0)
+   - infants: number of infants (default 0)
+   - num_travelers: total = adults + kids + infants (default 1)
 7. Preferences list (culture, adventure, food, relaxation, budget, luxury, "visit all places", etc.)
 8. Travel dates (calculate from duration: start today, end after N days)
 
 Return ONLY this JSON structure, no markdown or explanation:
-{{"destination":"Dubai","origin":"Mumbai","travel_dates":{{"start":"2025-06-01","end":"2025-06-10"}},"num_travelers":1,"budget":100000,"currency":"INR","preferences":["adventure","culture"],"duration_days":10,"confidence":0.9}}"""
+{{"destination":"Dubai","origin":"Mumbai","travel_dates":{{"start":"2025-06-01","end":"2025-06-10"}},"adults":2,"kids":1,"infants":0,"num_travelers":3,"budget":100000,"currency":"INR","preferences":["adventure","culture"],"duration_days":10,"confidence":0.9}}"""
 
 
 async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -46,6 +50,9 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "travel_dates":   prev_context.get("travel_dates", {}),
             "duration_days":  prev_context.get("duration_days", 7),
             "num_travelers":  prev_context.get("num_travelers", 1),
+            "adults":         prev_context.get("adults", 1),
+            "kids":           prev_context.get("kids", 0),
+            "infants":        prev_context.get("infants", 0),
             "budget":         prev_context.get("budget", 3000),
             "currency":       prev_context.get("currency", "USD"),
             "preferences":    prev_context.get("preferences", []),
@@ -150,6 +157,10 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "duration_days": fallback_duration,
             "budget": float(fallback_budget),
             "num_travelers": 1,
+            "adults": 1,
+            "kids": 0,
+            "infants": 0,
+            "trip_style": state.get("trip_style", ""),
             "preferences": fallback_preferences,
             "currency": fallback_currency,
             "warnings": [f"Supervisor LLM parsing failed ({parsed.get('error', 'unknown')}). "
@@ -183,13 +194,26 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             budget = float(m.group(1).replace(",", ""))
             parsed["budget"] = budget
     
+    n_travelers = int(parsed.get("num_travelers", 1))
+    adults = int(parsed.get("adults", 1))
+    kids = int(parsed.get("kids", 0))
+    infants = int(parsed.get("infants", 0))
+    if adults < 1:
+        adults = 1
+    if n_travelers < 1:
+        n_travelers = adults + kids + infants
+
     return {
         **state,
         "destination":    parsed.get("destination", "Unknown"),
         "origin":         parsed.get("origin", "Unknown"),
         "travel_dates":   travel_dates,
         "duration_days":  duration_days,
-        "num_travelers":  int(parsed.get("num_travelers", 1)),
+        "num_travelers":  n_travelers,
+        "adults":         adults,
+        "kids":           kids,
+        "infants":        infants,
+        "trip_style":     state.get("trip_style", ""),
         "budget":         float(budget),
         "currency":       parsed.get("currency", "USD"),
         "preferences":    parsed.get("preferences", []),

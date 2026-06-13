@@ -1,9 +1,3 @@
-"""
-Activity Tool — live data from OpenStreetMap (Overpass API).
-Fetches real POIs (attractions, museums, parks, etc.) for any destination.
-Returns real venue names and categories. No fabricated prices.
-"""
-
 from typing import Any, Dict
 from services.geo_service import fetch_activities
 

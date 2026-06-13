@@ -223,7 +223,7 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     travel_dates = state.get("travel_dates", {})
     chk_in = travel_dates.get("start", "2026-07-01")
     chk_out = travel_dates.get("end", "2026-07-02")
-    for h in hotels[:2]:
+    for h in hotels:
         name = h.get("name", "")
         if name and name not in _HOTEL_PRICE_CACHE:
             price = await get_hotel_price(name, destination, currency, chk_in, chk_out)
@@ -258,8 +258,8 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         system=ITINERARY_SYSTEM,
         provider=resolve_provider(state, "itinerary"),
         api_key=state.get("api_key"),
-        retries=1,
-        timeout=90,
+        retries=0,
+        timeout=45,
     )
 
     trace = state.get("execution_trace", [])
