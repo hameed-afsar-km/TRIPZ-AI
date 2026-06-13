@@ -3,17 +3,39 @@ from typing import Any, Dict
 from tools.weather_tool import weather_tool
 from tools.transport_tool import transport_tool
 
+def _recommend_transport(distance_km: float | None, origin: str, destination: str) -> Dict[str, Any]:
+    if distance_km is None:
+        return {"recommended_mode": "unknown", "note": "Distance unknown, cannot recommend transport."}
+    if distance_km > 2000:
+        return {
+            "recommended_mode": "flight",
+            "estimated_duration_hours": round(distance_km / 850, 1),
+            "note": f"Long distance ({distance_km} km) — flying is the best option.",
+        }
+    elif distance_km > 500:
+        return {
+            "recommended_mode": "train",
+            "estimated_duration_hours": round(distance_km / 120, 1),
+            "note": f"Moderate distance ({distance_km} km) — train is comfortable and efficient.",
+        }
+    else:
+        return {
+            "recommended_mode": "bus",
+            "estimated_duration_hours": round(distance_km / 60, 1),
+            "note": f"Short distance ({distance_km} km) — bus or car is the most practical.",
+        }
+
+
 async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Transit Agent: Executes the weather and transport gathering in parallel.
-    Consolidates transport options and weather details into the state.
+    Transit Agent: Executes weather + transport gathering in parallel.
+    Then recommends best transport mode (flight/train/bus) based on distance.
     """
     trace = state.get("execution_trace", [])
     if state.get("weather") and state.get("transport"):
         return {"execution_trace": trace + ["transit_agent:from_cache"]}
 
     try:
-        # Execute both tools concurrently
         results = await asyncio.gather(
             weather_tool(state),
             transport_tool(state),
@@ -39,6 +61,12 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
                 tool_trace = result.get("execution_trace", [])
                 if tool_trace:
                     trace = tool_trace
+
+        distance_km = transport.get("distance_km") if isinstance(transport, dict) else None
+        origin = state.get("origin", "Unknown")
+        destination = state.get("destination", "Unknown")
+        recommendation = _recommend_transport(distance_km, origin, destination)
+        transport["recommended"] = recommendation
 
         return {
             "weather": weather,

@@ -12,6 +12,7 @@ ITINERARY_SYSTEM = "You are a travel planner. Output ONLY valid JSON. Every slot
 
 ITINERARY_PROMPT_TEMPLATE = """Plan a {num_days}-day trip to {destination} from {origin}.
 Trip style: {trip_type}. Budget: {currency} {budget}. Preferences: {preferences}.
+Travelers: {adults} adult(s), {kids} kid(s), {infants} infant(s).
 
 Hotels: {hotels}
 Transport: {transport}
@@ -30,6 +31,8 @@ RULES:
 8. Mix themes across days: pick from: Arrival & City Orientation, Cultural Immersion & Heritage, Adventure & Outdoor Exploration, Food Markets & Local Life, Iconic Landmarks & Sightseeing, Relaxation & Wellness, Shopping & Entertainment, Day Trip & Beyond
 9. Include a budget_tip per day with a specific money-saving suggestion
 10. BANNED generic phrases (NEVER use these): "Local cuisine lunch", "Evening walk", "Last minute shopping", "Departure", "Check-in", "Check-out", "Food tour", "Campfire", "Dune bashing", "Sightseeing", "Shopping", "Explore the city", "Relax at hotel"
+11. CHECK suitability for the group: activities must be appropriate for kids/infants if present. Avoid dangerous/extreme activities for families with young children.
+12. CHECK hotel capacity: ensure recommended hotels can accommodate the full group size.
 
 Return ONLY valid JSON:
 {{"title":"{num_days}-Day Trip to {destination}","currency":"{currency}","summary":"","days":[
@@ -217,6 +220,10 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             seen_act_names.add(n)
             unique_activities.append(a)
 
+    adults = state.get("adults", 1)
+    kids = state.get("kids", 0)
+    infants = state.get("infants", 0)
+
     hotel_data = [{k: h.get(k) for k in ("name","stars","type") if k in h} for h in hotels[:2]]
 
     # Attempt to enrich hotels with live pricing
@@ -245,6 +252,9 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         budget=budget_display,
         currency=currency,
         preferences=", ".join(preferences) or "general",
+        adults=adults,
+        kids=kids,
+        infants=infants,
         hotels=_trunc(json.dumps(hotel_data), 300),
         transport=_trunc(json.dumps(transport_data), 200),
         activities=_trunc(json.dumps(act_data), 2000),
