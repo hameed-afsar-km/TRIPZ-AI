@@ -73,7 +73,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         provider=resolve_provider(state, "critic"),
         api_key=state.get("api_key"),
         retries=0,
-        timeout=30,
+        timeout=60,
     )
 
     if "error" in result:

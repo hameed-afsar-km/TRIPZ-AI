@@ -98,7 +98,7 @@ async def call_llm(
     provider: str = "ollama",
     api_key: Optional[str] = None,
     use_cache: bool = True,
-    timeout: int = 30,
+    timeout: int = 60,
 ) -> str:
     ckey = _cache_key(prompt, system, provider, expect_json, temperature)
     if use_cache and ckey in _cache:
@@ -216,7 +216,7 @@ async def call_llm_json(
     retries: int = 0,
     provider: str = "ollama",
     api_key: Optional[str] = None,
-    timeout: int = 30,
+    timeout: int = 60,
 ) -> Dict[str, Any]:
     last_raw = ""
     backoff = 0.05

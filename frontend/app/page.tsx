@@ -26,6 +26,7 @@ import {
 interface AgentMessage {
   id: string;
   agent: "Planner" | "Budget" | "Transit" | "Curator" | "Synthesis";
+  agentKey: string;
   status: "thinking" | "completed";
   text: string;
   timestamp: string;
@@ -61,38 +62,49 @@ const AGENT_STATUS_MESSAGES: Record<string, string[]> = {
     "Parsing your travel request...",
     "Understanding your preferences...",
     "Extracting destinations & dates...",
+    "Analyzing trip requirements...",
+    "Identifying key travel details...",
   ],
   routing_agent: [
     "Determining your travel style...",
     "Classifying trip type...",
+    "Optimizing for your preferences...",
   ],
   transit_agent: [
-    "Checking weather conditions...",
-    "Finding best transport options...",
-    "Calculating travel distances...",
+    "Checking weather conditions in your destination...",
+    "Finding the best transport options...",
     "Making sure the travel is suitable...",
+    "Calculating travel distances & times...",
+    "Recommending the best route for you...",
   ],
   budget_agent: [
-    "Scouting hotel prices...",
-    "Estimating daily costs...",
+    "Scouting hotel prices in the area...",
+    "Estimating daily food & activity costs...",
     "Planning your budget allocation...",
+    "Finding the best value accommodations...",
+    "Making sure your budget works for the trip...",
   ],
   curator_agent: [
     "Curating the best viewpoints...",
-    "Discovering hidden gems...",
-    "Finding top attractions...",
-    "Selecting must-visit spots...",
+    "Discovering hidden gems in the area...",
+    "Finding top attractions & landmarks...",
+    "Selecting must-visit spots for you...",
+    "Orchestrating the perfect sightseeing plan...",
   ],
   itinerary_agent: [
     "Crafting your perfect day-by-day plan...",
-    "Optimizing your schedule...",
-    "Balancing activities & relaxation...",
+    "Optimizing your schedule for maximum fun...",
+    "Balancing activities, meals & relaxation...",
     "Making sure everything fits your budget...",
+    "Arranging the best sequence of activities...",
+    "Checking distances between attractions...",
   ],
   critic_agent: [
-    "Reviewing itinerary quality...",
-    "Checking budget compliance...",
-    "Validating day-by-day flow...",
+    "Reviewing itinerary quality & completeness...",
+    "Checking budget compliance & accuracy...",
+    "Validating the day-by-day flow...",
+    "Making sure nothing was missed...",
+    "Final quality check on your trip plan...",
   ],
 };
 
@@ -143,7 +155,7 @@ function TypingMessageInner({ message, className }: { message: string; className
 }
 
 function TypingMessage({ agentKey, className }: { agentKey: string; className?: string }) {
-  const message = useCyclingMessages(agentKey, 2800);
+  const message = useCyclingMessages(agentKey, 4000);
   return <TypingMessageInner key={message} message={message} className={className} />;
 }
 
@@ -439,6 +451,7 @@ export default function Home() {
       {
         id: "init",
         agent: "Planner",
+        agentKey: "supervisor_agent",
         status: "thinking",
         text: "Orchestrator parsing request: Analyzing input and preparing agent workspaces...",
         timestamp: new Date().toLocaleTimeString(),
@@ -519,6 +532,7 @@ export default function Home() {
                     return [...prev, {
                       id: String(logCounter++),
                       agent: mapped.name,
+                      agentKey: data.agent,
                       status: "thinking",
                       text: data.message || `Running ${data.agent}...`,
                       timestamp: new Date().toLocaleTimeString()
@@ -568,6 +582,7 @@ export default function Home() {
                   setSimulationLogs(prev => [...prev, {
                     id: String(logCounter++),
                     agent: errorMapped.name,
+                    agentKey: data.agent || "unknown",
                     status: "completed",
                     text: data.message || "An error occurred",
                     timestamp: new Date().toLocaleTimeString(),
@@ -587,6 +602,7 @@ export default function Home() {
           setSimulationLogs(prev => [...prev, {
             id: "timeout",
             agent: "Planner",
+            agentKey: "supervisor_agent",
             status: "completed",
             text: "Request timed out after 120 seconds. The backend might be unavailable or overloaded.",
             timestamp: new Date().toLocaleTimeString(),
@@ -603,6 +619,7 @@ export default function Home() {
       setSimulationLogs(prev => [...prev, {
         id: "error",
         agent: "Planner",
+        agentKey: "supervisor_agent",
         status: "completed",
         text: `Network Error: Could not connect to backend.`,
         timestamp: new Date().toLocaleTimeString(),
@@ -833,16 +850,21 @@ export default function Home() {
                     const hasError = logs.some(l => l.isError === true);
                     const isThinking = logs.some(l => l.status === "thinking");
                     
-                    const isActive = isThinking || activeStep === agent.step;
                     const isCompleted = logs.length > 0 && logs.every(l => l.status === "completed") && !isThinking;
-                    const isPending = logs.length === 0 && activeStep < agent.step;
+                    const isActive = isThinking;
+                    const isPending = logs.length === 0;
+                    const activeLog = logs.find(l => l.status === "thinking");
+                    const cardAgentKey = activeLog?.agentKey || currentAgentKey;
                     
                     return (
                       <motion.div
                         key={i}
                         initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.1 }}
+                        animate={{
+                          opacity: 1,
+                          scale: 1,
+                          transition: { delay: i * 0.1 }
+                        }}
                         className={`relative overflow-hidden flex flex-col p-5 rounded-2xl border transition-all duration-500 flex-1 min-w-0 ${
                           hasError
                             ? "border-red-500/50 bg-red-950/20 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
@@ -858,10 +880,10 @@ export default function Home() {
                             <div className={`p-2 rounded-xl transition-colors duration-500 shrink-0 ${
                               hasError
                                 ? 'bg-red-500/20 text-red-400'
-                                : isActive 
-                                  ? 'bg-orange-500/20 text-orange-400 animate-pulse' 
-                                  : isCompleted 
-                                    ? 'bg-emerald-500/20 text-emerald-400' 
+                                : isActive
+                                  ? 'bg-orange-500/20 text-orange-400 animate-pulse'
+                                  : isCompleted
+                                    ? 'bg-emerald-500/20 text-emerald-400'
                                     : 'bg-zinc-900 text-zinc-600'
                             }`}>
                               <agent.icon className="h-4.5 w-4.5" />
@@ -869,8 +891,8 @@ export default function Home() {
                             <span className={`font-bold tracking-wide text-xs md:text-sm truncate transition-colors duration-500 ${
                               hasError
                                 ? 'text-red-300'
-                                : isActive || isCompleted 
-                                  ? 'text-white' 
+                                : isActive || isCompleted
+                                  ? 'text-white'
                                   : 'text-zinc-500'
                             }`}>{agent.name}</span>
                           </div>
@@ -878,33 +900,57 @@ export default function Home() {
                           {isActive && !hasError && <Loader2 className="h-4 w-4 text-orange-500 animate-spin" />}
                           {isCompleted && !hasError && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                         </div>
-                        
+
                         <div className="flex-1 text-xs md:text-[13px] text-zinc-400 font-mono flex flex-col justify-center min-w-0 overflow-hidden">
                           {hasError ? (
                             <span className="text-red-400 font-semibold">Error</span>
+                          ) : isCompleted ? (
+                            <motion.div
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="flex flex-col gap-1"
+                            >
+                              <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Done
+                              </span>
+                              {logs.length > 0 && (
+                                <span className="text-zinc-500 line-clamp-2 text-[10px] md:text-[11px] leading-normal mt-0.5">
+                                  {logs[logs.length - 1].text}
+                                </span>
+                              )}
+                            </motion.div>
                           ) : isPending ? (
-                            <span className="text-zinc-600 italic">Pending</span>
+                            <span className="text-zinc-600 italic">Waiting...</span>
                           ) : isActive ? (
-                            <div className="flex flex-col gap-1 h-full overflow-hidden">
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="flex flex-col gap-1 h-full overflow-hidden"
+                            >
                               <span className="text-orange-400/80 text-[11px] md:text-[12px] leading-relaxed font-mono">
-                                <TypingMessage agentKey={currentAgentKey} />
+                                <TypingMessage agentKey={cardAgentKey} />
                               </span>
                               {streamingTokens ? (
-                                <span className="text-zinc-500 text-[10px] md:text-[11px] leading-normal mt-1 overflow-y-auto line-clamp-3 break-words">
+                                <span className="text-zinc-500 text-[10px] md:text-[11px] leading-normal mt-1 overflow-y-auto line-clamp-2 break-words">
                                   {streamingTokens}
                                 </span>
                               ) : null}
-                            </div>
-                          ) : (
-                            <div className="flex flex-col gap-1">
-                              <span className="text-emerald-400 font-semibold">Completed</span>
-                              {logs.length > 0 && <span className="text-zinc-500 line-clamp-3 text-[10px] md:text-[11px] leading-normal mt-1">{logs[logs.length - 1].text}</span>}
-                            </div>
-                          )}
+                            </motion.div>
+                          ) : null}
                         </div>
 
                         {isActive && (
                           <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-orange-500 to-transparent animate-pulse" />
+                        )}
+                        {isCompleted && (
+                          <motion.div
+                            initial={{ width: "0%" }}
+                            animate={{ width: "100%" }}
+                            transition={{ duration: 0.5 }}
+                            className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent"
+                          />
                         )}
                       </motion.div>
                     );

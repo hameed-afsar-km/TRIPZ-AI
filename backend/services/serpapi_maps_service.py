@@ -40,7 +40,7 @@ async def estimate_daily_food_cost(destination: str, currency: str = "USD") -> O
             system=FOOD_COST_SYSTEM,
             provider="groq",
             api_key=os.getenv("GROQ_API_KEY"),
-            timeout=30,
+            timeout=60,
         )
         if "error" in result:
             logger.debug("Food cost LLM estimation failed: %s", result["error"])
