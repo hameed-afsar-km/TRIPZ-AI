@@ -37,7 +37,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             **state,
             "error": "No user request provided",
             "duration_days": 7,
-            "execution_trace": state.get("execution_trace", []) + ["supervisor_agent:error"],
+            "execution_trace": ["supervisor_agent:error"],
         }
 
     # If we have previous context, seed the parse faster
@@ -57,7 +57,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "currency":       prev_context.get("currency", "USD"),
             "preferences":    prev_context.get("preferences", []),
             "confidence_score": 0.9,
-            "execution_trace": state.get("execution_trace", []) + ["supervisor_agent:from_context"],
+            "execution_trace": ["supervisor_agent:from_context"],
         }
 
     prompt = SUPERVISOR_PROMPT_TEMPLATE.format(request=user_request)
@@ -165,7 +165,7 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "currency": fallback_currency,
             "warnings": [f"Supervisor LLM parsing failed ({parsed.get('error', 'unknown')}). "
                          "Used regex fallback on raw text — some fields may be wrong."],
-            "execution_trace": state.get("execution_trace", []) + ["supervisor_agent:fallback"],
+            "execution_trace": ["supervisor_agent:fallback"],
         }
 
     # Calculate dates from duration if not provided
@@ -218,5 +218,5 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         "currency":       parsed.get("currency", "USD"),
         "preferences":    parsed.get("preferences", []),
         "confidence_score": float(parsed.get("confidence", 0.5)),
-        "execution_trace": state.get("execution_trace", []) + ["supervisor_agent"],
+        "execution_trace": ["supervisor_agent"],
     }

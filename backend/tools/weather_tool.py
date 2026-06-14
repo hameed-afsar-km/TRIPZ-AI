@@ -94,5 +94,4 @@ async def weather_tool(state: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         weather_result = {"error": str(e), "forecast": []}
 
-    trace = state.get("execution_trace", [])
-    return {**state, "weather": weather_result, "execution_trace": trace + ["weather_tool"]}
+    return {**state, "weather": weather_result, "execution_trace": ["weather_tool"]}

@@ -26,7 +26,7 @@ async def transport_tool(state: Dict[str, Any]) -> Dict[str, Any]:
         return {
             **state,
             "transport": {"error": "Origin and destination required for transport calculation"},
-            "execution_trace": state.get("execution_trace", []) + ["transport_tool:failed"],
+            "execution_trace": ["transport_tool:failed"],
         }
 
     origin_geo = await geocode_city(origin) if origin else None
@@ -36,7 +36,7 @@ async def transport_tool(state: Dict[str, Any]) -> Dict[str, Any]:
         return {
             **state,
             "transport": {"error": f"Could not geocode origin ({origin}) or destination ({destination})"},
-            "execution_trace": state.get("execution_trace", []) + ["transport_tool:failed"],
+            "execution_trace": ["transport_tool:failed"],
         }
 
     distance_km = _haversine_km(
@@ -55,9 +55,8 @@ async def transport_tool(state: Dict[str, Any]) -> Dict[str, Any]:
         "note": "Distance calculated from coordinates. No real-time pricing available from free APIs.",
     }
 
-    trace = state.get("execution_trace", [])
     return {
         **state,
         "transport": transport_result,
-        "execution_trace": trace + ["transport_tool"],
+        "execution_trace": ["transport_tool"],
     }

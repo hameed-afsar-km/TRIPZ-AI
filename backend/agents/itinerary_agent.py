@@ -192,7 +192,7 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     prev = state.get("previous_context", {})
     if prev and prev.get("days") and prev.get("destination") == state.get("destination"):
-        return {**state, "itinerary": prev, "execution_trace": state.get("execution_trace", []) + ["itinerary_agent:from_context"]}
+        return {**state, "itinerary": prev, "execution_trace": ["itinerary_agent:from_context"]}
 
     hotels = state.get("hotels", [])
     activities = state.get("activities", [])
@@ -272,10 +272,9 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         timeout=45,
     )
 
-    trace = state.get("execution_trace", [])
     if isinstance(itinerary, dict) and "error" not in itinerary:
         itinerary = await _recalculate_costs(itinerary, hotels, activities, currency, num_days, budget)
-        result: Dict[str, Any] = {**state, "itinerary": itinerary, "execution_trace": trace + ["itinerary_agent"]}
+        result: Dict[str, Any] = {**state, "itinerary": itinerary, "execution_trace": ["itinerary_agent"]}
     else:
         err = itinerary.get("error", "LLM synthesis failed")
         raw = itinerary.get("raw", "(none)")
@@ -284,6 +283,6 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             **state,
             "itinerary": {"error": err, "error_type": "llm_failure"},
             "warnings": [f"LLM synthesis failed: {err}. No fallback — fix the underlying issue."],
-            "execution_trace": trace + ["itinerary_agent:failed"],
+            "execution_trace": ["itinerary_agent:failed"],
         }
     return result

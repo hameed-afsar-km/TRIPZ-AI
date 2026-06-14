@@ -7,9 +7,8 @@ async def curator_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     Curator Agent: Gathers and structures activities for the trip plan.
     Uses the activity tool and structures results into the state.
     """
-    trace = state.get("execution_trace", [])
     if state.get("activities"):
-        return {"execution_trace": trace + ["curator_agent:from_cache"]}
+        return {"execution_trace": ["curator_agent:from_cache"]}
 
     result = await activity_tool(state)
     trace = state.get("execution_trace", [])
@@ -28,7 +27,7 @@ async def curator_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         
     return {
         "activities": activities,
-        "warnings": state.get("warnings", []) + warnings,
+        "warnings": warnings,
         "execution_trace": trace + ["curator_agent"],
     }
 

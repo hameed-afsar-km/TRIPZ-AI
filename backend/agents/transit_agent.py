@@ -31,9 +31,8 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     Transit Agent: Executes weather + transport gathering in parallel.
     Then recommends best transport mode (flight/train/bus) based on distance.
     """
-    trace = state.get("execution_trace", [])
     if state.get("weather") and state.get("transport"):
-        return {"execution_trace": trace + ["transit_agent:from_cache"]}
+        return {"execution_trace": ["transit_agent:from_cache"]}
 
     try:
         results = await asyncio.gather(
@@ -71,7 +70,7 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "weather": weather,
             "transport": transport,
-            "warnings": state.get("warnings", []) + warnings,
+            "warnings": warnings,
             "execution_trace": trace + ["transit_agent"],
         }
     except Exception as e:
@@ -79,6 +78,6 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "weather": {"error": str(e)},
             "transport": {},
             "warnings": state.get("warnings", []) + [f"Transit agent error: {str(e)}"],
-            "execution_trace": state.get("execution_trace", []) + ["transit_agent:error"],
+            "execution_trace": ["transit_agent:error"],
         }
 

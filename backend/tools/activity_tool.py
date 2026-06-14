@@ -10,11 +10,10 @@ async def activity_tool(state: Dict[str, Any]) -> Dict[str, Any]:
     activities = await fetch_activities(destination)
 
     if not activities:
-        trace = state.get("execution_trace", [])
         return {
             **state,
             "activities": [],
-            "execution_trace": trace + ["activity_tool:empty"],
+            "execution_trace": ["activity_tool:empty"],
         }
 
     def _score(a: Dict) -> int:
@@ -28,9 +27,8 @@ async def activity_tool(state: Dict[str, Any]) -> Dict[str, Any]:
 
     activities.sort(key=_score, reverse=True)
 
-    trace = state.get("execution_trace", [])
     return {
         **state,
         "activities": activities,
-        "execution_trace": trace + ["activity_tool"],
+        "execution_trace": ["activity_tool"],
     }

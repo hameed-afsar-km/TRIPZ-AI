@@ -28,8 +28,6 @@ async def replanning_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     budget = float(state.get("budget", 3000))
     currency = state.get("currency", "USD")
     dates = state.get("travel_dates", {})
-    trace = state.get("execution_trace", [])
-    
     # Calculate number of days
     try:
         from datetime import date
@@ -43,7 +41,7 @@ async def replanning_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         return {
             **state,
             "replan_count": state.get("replan_count", 0) + 1,
-            "execution_trace": trace + ["replanning_agent:skipped"],
+            "execution_trace": ["replanning_agent:skipped"],
         }
 
     itinerary_json = json.dumps(current_itinerary, indent=None)
@@ -89,7 +87,7 @@ async def replanning_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "warnings": warnings,
             "replan_count": state.get("replan_count", 0) + 1,
             "needs_replanning": False,
-            "execution_trace": trace + ["replanning_agent:failed"],
+            "execution_trace": ["replanning_agent:failed"],
         }
 
     return {
@@ -99,5 +97,5 @@ async def replanning_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         "needs_replanning": False,
         "critic_feedback": "",
         "critic_issues": [],
-        "execution_trace": trace + ["replanning_agent:patched"],
+        "execution_trace": ["replanning_agent:patched"],
     }

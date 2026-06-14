@@ -18,7 +18,7 @@ async def budget_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         trace = state.get("execution_trace", [])
 
         if state.get("budget_breakdown"):
-            return {"execution_trace": trace + ["budget_agent:from_cache"]}
+            return {"execution_trace": ["budget_agent:from_cache"]}
 
         warnings: list = []
 
@@ -73,7 +73,7 @@ async def budget_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "budget_breakdown": budget_breakdown,
             "hotels": hotels,
-            "warnings": state.get("warnings", []) + warnings,
+            "warnings": warnings,
             "execution_trace": trace + ["budget_agent"],
         }
     except Exception as e:
@@ -81,5 +81,5 @@ async def budget_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "budget_breakdown": {"error": str(e)},
             "hotels": [],
             "warnings": state.get("warnings", []) + [f"Budget agent error: {str(e)}"],
-            "execution_trace": state.get("execution_trace", []) + ["budget_agent:error"],
+            "execution_trace": ["budget_agent:error"],
         }

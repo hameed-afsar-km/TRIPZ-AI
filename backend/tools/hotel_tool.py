@@ -14,9 +14,8 @@ async def hotel_tool(state: Dict[str, Any]) -> Dict[str, Any]:
 
     hotels = await fetch_hotels(destination)
 
-    trace = state.get("execution_trace", [])
     return {
         **state,
         "hotels": hotels,
-        "execution_trace": trace + ["hotel_tool"],
+        "execution_trace": ["hotel_tool"],
     }
