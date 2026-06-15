@@ -98,24 +98,11 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # Parallel agents → itinerary_agent
-    graph.add_edge("budget_agent",        "itinerary_agent")
-    graph.add_edge("transit_agent",       "itinerary_agent")
-    graph.add_edge("curator_agent",       "itinerary_agent")
-    graph.add_edge("routing_agent",       "itinerary_agent")
-
-    # itinerary → critic
-    graph.add_edge("itinerary_agent",     "critic_agent")
-
-    # critic → itinerary (replan loop) or END
-    graph.add_conditional_edges(
-        "critic_agent",
-        route_after_critic,
-        {
-            "itinerary_agent": "itinerary_agent",
-            "__end__":         END,
-        },
-    )
+    # [ITINERARY DISABLED] Parallel agents → END directly
+    graph.add_edge("budget_agent",        END)
+    graph.add_edge("transit_agent",       END)
+    graph.add_edge("curator_agent",       END)
+    graph.add_edge("routing_agent",       END)
 
     # clarify → END
     graph.add_edge("clarify_node",        END)

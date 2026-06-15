@@ -31,6 +31,7 @@ interface AgentMessage {
   text: string;
   timestamp: string;
   isError?: boolean;
+  output?: any;
 }
 
 const AGENT_MAP: Record<string, { name: "Planner" | "Budget" | "Transit" | "Curator" | "Synthesis"; step: number }> = {
@@ -157,6 +158,48 @@ function TypingMessageInner({ message, className }: { message: string; className
 function TypingMessage({ agentKey, className }: { agentKey: string; className?: string }) {
   const message = useCyclingMessages(agentKey, 4000);
   return <TypingMessageInner key={message} message={message} className={className} />;
+}
+
+function AgentOutputCard({ log }: { log: AgentMessage }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const hasOutput = log.output && Object.keys(log.output).length > 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="flex flex-col gap-1"
+    >
+      <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Done
+      </span>
+      {log.text && (
+        <span className="text-zinc-500 text-[10px] md:text-[11px] leading-normal mt-0.5">
+          {log.text}
+        </span>
+      )}
+      {hasOutput && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-[10px] text-orange-400/70 hover:text-orange-300 mt-1 text-left underline underline-offset-2 decoration-orange-400/30"
+        >
+          {expanded ? "Hide output" : "View output"}
+        </button>
+      )}
+      {hasOutput && expanded && (
+        <motion.pre
+          initial={{ opacity: 0, maxHeight: 0 }}
+          animate={{ opacity: 1, maxHeight: 400 }}
+          exit={{ opacity: 0, maxHeight: 0 }}
+          className="text-[10px] text-zinc-400 bg-zinc-900/80 rounded-lg p-2 mt-1 overflow-auto border border-zinc-800 leading-relaxed whitespace-pre-wrap"
+        >
+          {JSON.stringify(log.output, null, 2)}
+        </motion.pre>
+      )}
+    </motion.div>
+  );
 }
 
 const isTripRelated = (text: string): boolean => {
@@ -443,7 +486,7 @@ export default function Home() {
     const timeoutId = setTimeout(() => {
       isTimeout = true;
       controller.abort();
-    }, 200000);
+    }, 300000);
     setSimulationStage("agents");
     setIsProcessing(true);
     setStreamingTokens("");
@@ -547,6 +590,7 @@ export default function Home() {
                     for (let i = newLogs.length - 1; i >= 0; i--) {
                       if (targetAgent && newLogs[i].agent === targetAgent && newLogs[i].status === "thinking") {
                         newLogs[i].status = "completed";
+                        newLogs[i].output = data.output;
                         if (data.preview && Object.keys(data.preview).length > 0) {
                           const previewText = JSON.stringify(data.preview)
                              .replace(/["{}]/g, "")
@@ -905,22 +949,7 @@ export default function Home() {
                           {hasError ? (
                             <span className="text-red-400 font-semibold">Error</span>
                           ) : isCompleted ? (
-                            <motion.div
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.3 }}
-                              className="flex flex-col gap-1"
-                            >
-                              <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Done
-                              </span>
-                              {logs.length > 0 && (
-                                <span className="text-zinc-500 line-clamp-2 text-[10px] md:text-[11px] leading-normal mt-0.5">
-                                  {logs[logs.length - 1].text}
-                                </span>
-                              )}
-                            </motion.div>
+                            <AgentOutputCard log={logs[logs.length - 1]} />
                           ) : isPending ? (
                             <span className="text-zinc-600 italic">Waiting...</span>
                           ) : isActive ? (

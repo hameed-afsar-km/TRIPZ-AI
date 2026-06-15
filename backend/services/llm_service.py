@@ -72,7 +72,10 @@ def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, exp
     elif provider == "anthropic":
         return ChatAnthropic(model="claude-3-haiku-20240307", temperature=temperature, api_key=key)
     elif provider == "gemini":
-        return ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=temperature, api_key=key)
+        kwargs: dict = {"model": "gemini-2.5-flash", "temperature": temperature, "api_key": key}
+        if expect_json:
+            kwargs["response_mime_type"] = "application/json"
+        return ChatGoogleGenerativeAI(**kwargs)
     elif provider == "openrouter":
         return ChatOpenAI(
             base_url="https://openrouter.ai/api/v1",

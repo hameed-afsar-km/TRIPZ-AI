@@ -269,7 +269,7 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         provider=resolve_provider(state, "itinerary"),
         api_key=state.get("api_key"),
         retries=0,
-        timeout=45,
+        timeout=120,
     )
 
     if isinstance(itinerary, dict) and "error" not in itinerary:

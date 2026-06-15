@@ -470,21 +470,29 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   
   // Settings State
   const [showSettings, setShowSettings] = React.useState(false);
-  const [provider, setProvider] = React.useState("ollama");
+  const [provider, setProvider] = React.useState("groq");
   const [apiKey, setApiKey] = React.useState("");
+  const [freeTier, setFreeTier] = React.useState(true);
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       const savedProvider = localStorage.getItem("tripz_provider");
       const savedKey = localStorage.getItem("tripz_api_key");
+      const savedFreeTier = localStorage.getItem("tripz_free_tier");
       if (savedProvider) setProvider(savedProvider);
       if (savedKey) setApiKey(savedKey);
+      if (savedFreeTier !== null) setFreeTier(savedFreeTier === "true");
     }
   }, []);
+
+  const agentProviders: Record<string, string> = freeTier
+    ? { supervisor: "gemini", itinerary: "gemini" }
+    : {};
 
   const saveSettings = () => {
     localStorage.setItem("tripz_provider", provider);
     localStorage.setItem("tripz_api_key", apiKey);
+    localStorage.setItem("tripz_free_tier", String(freeTier));
     setShowSettings(false);
   };
 
@@ -573,7 +581,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
 
   const handleSubmit = () => {
     if (input.trim() || files.length > 0) {
-      onSend(input, files, provider, apiKey, undefined, adults, kids, infants, tripStyle);
+      onSend(input, files, provider, apiKey, agentProviders, adults, kids, infants, tripStyle);
       setInput("");
       setFiles([]);
       setFilePreviews({});
@@ -585,7 +593,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   const handleStopRecording = (duration: number) => {
     console.log(`Stopped recording after ${duration} seconds`);
     setIsRecording(false);
-    onSend(`[Voice message - ${duration} seconds]`, [], provider, apiKey, undefined, adults, kids, infants, tripStyle);
+    onSend(`[Voice message - ${duration} seconds]`, [], provider, apiKey, agentProviders, adults, kids, infants, tripStyle);
   };
 
   const hasContent = input.trim() !== "" || files.length > 0;
@@ -776,6 +784,33 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
               </button>
             </PromptInputAction>
 
+            {/* Free Tier badge */}
+            <PromptInputAction
+              tooltip={
+                freeTier
+                  ? "Free Tier ON — Groq + Gemini (no API keys needed)"
+                  : "Free Tier OFF — click to use built-in free providers"
+              }
+            >
+              <button
+                type="button"
+                onClick={() => setFreeTier(!freeTier)}
+                className={cn(
+                  "flex h-6 cursor-pointer items-center gap-1 rounded-full border px-2 text-[10px] font-semibold uppercase tracking-wider transition-all",
+                  freeTier
+                    ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                    : "border-zinc-700/40 bg-zinc-800/40 text-zinc-500 hover:border-zinc-600 hover:text-zinc-400"
+                )}
+                disabled={isRecording}
+              >
+                <span className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  freeTier ? "bg-emerald-400" : "bg-zinc-500"
+                )} />
+                Free
+              </button>
+            </PromptInputAction>
+
             <div className="flex items-center">
               <PromptInputAction tooltip="History">
                 <button
@@ -870,11 +905,45 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
           </DialogTitle>
           
           <div className="space-y-4">
+            {/* Free Tier Toggle */}
+            <div className="flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full",
+                  freeTier ? "bg-emerald-500/20" : "bg-zinc-800"
+                )}>
+                  <svg className={cn("h-4 w-4", freeTier ? "text-emerald-400" : "text-zinc-500")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">Free Tier</p>
+                  <p className="text-[11px] text-zinc-400">Groq + Gemini — no API keys needed</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFreeTier(!freeTier)}
+                className={cn(
+                  "relative h-6 w-11 rounded-full transition-colors",
+                  freeTier ? "bg-emerald-500" : "bg-zinc-700"
+                )}
+              >
+                <span className={cn(
+                  "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform",
+                  freeTier && "translate-x-5"
+                )} />
+              </button>
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-300">LLM Provider</label>
               <select
                 value={provider}
-                onChange={(e) => setProvider(e.target.value)}
+                onChange={(e) => {
+                  setProvider(e.target.value);
+                  if (e.target.value !== "groq") setFreeTier(false);
+                }}
                 className="w-full bg-[#09090b]/80 border border-white/10 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50"
               >
                 <option value="ollama">Ollama (Local - qwen2.5:1.5b)</option>

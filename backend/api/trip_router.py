@@ -69,7 +69,7 @@ async def plan_trip_stream(request: TripRequest):
         initial_state = {
             "user_request": request.user_request,
             "provider": request.provider,
-            "api_key": request.api_key or os.getenv("GROQ_API_KEY"),
+            "api_key": request.api_key,
             "agent_providers": agent_providers,
             "adults": request.adults,
             "kids": request.kids,
@@ -135,7 +135,7 @@ async def plan_trip_stream(request: TripRequest):
 
             async def collect():
                 nonlocal graph_done
-                deadline = asyncio.get_event_loop().time() + 220
+                deadline = asyncio.get_event_loop().time() + 300
                 try:
                     ait = trip_graph.astream_events(initial_state)
                     while True:
@@ -193,10 +193,13 @@ async def plan_trip_stream(request: TripRequest):
                             preview_str = ""
                             if preview:
                                 preview_str = " | " + " ".join(f"{k}={v}" for k, v in preview.items() if v)
+                            # Strip out large blobs for the log preview
+                            output_clean = _sanitize_output(name, output) if output else {}
                             logger.info("  ✔ AGENT COMPLETED: %-18s  (%.1fs)%s", name, duration, preview_str)
                             yield _sse("agent_complete", {
                                 "agent": name,
                                 "preview": preview,
+                                "output": output_clean,
                                 "duration_sec": round(duration, 1),
                             })
                             if output:
@@ -299,7 +302,7 @@ async def plan_trip(request: TripRequest) -> TripResponse:
     initial_state = {
         "user_request": request.user_request,
         "provider": request.provider,
-        "api_key": request.api_key or os.getenv("GROQ_API_KEY"),
+        "api_key": request.api_key,
         "agent_providers": agent_providers,
         "adults": request.adults,
         "kids": request.kids,
@@ -352,11 +355,38 @@ def _agent_label(name: str) -> str:
     return labels.get(name, f"Running {name}...")
 
 
+def _sanitize_output(agent: str, output: dict) -> dict:
+    """Return a display-safe version of agent output (strip large blobs)."""
+    if not output or not isinstance(output, dict):
+        return {}
+    skip_keys = {"execution_trace", "warnings", "replan_instructions",
+                  "needs_replanning", "agent_providers", "previous_context",
+                  "user_request", "itinerary"}
+    result = {}
+    for k, v in output.items():
+        if k in skip_keys:
+            continue
+        if isinstance(v, (str, int, float, bool)):
+            result[k] = v
+        elif isinstance(v, list) and len(v) <= 15:
+            if all(isinstance(i, dict) for i in v):
+                result[k] = [{sk: sv for sk, sv in item.items() if not isinstance(sv, (list, dict)) or len(str(sv)) < 200} for item in v[:5]]
+            else:
+                result[k] = v[:10]
+        elif isinstance(v, dict):
+            result[k] = {sk: sv for sk, sv in v.items() if not isinstance(sv, (list, dict)) or len(str(sv)) < 200}
+        else:
+            result[k] = str(v)[:200]
+    return result
+
+
 def _extract_preview(agent: str, output: dict) -> dict:
     if not output or not isinstance(output, dict):
         return {}
     if agent == "supervisor_agent":
         return {"destination": output.get("destination"), "budget": output.get("budget")}
+    if agent == "routing_agent":
+        return {"trip_type": output.get("routing_decision")}
     if agent == "transit_agent":
         return {
             "weather_ok": bool(output.get("weather")),
