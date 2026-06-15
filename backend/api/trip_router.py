@@ -59,11 +59,18 @@ async def plan_trip_stream(request: TripRequest):
             prev = await session_memory.load(request.session_id)
 
         travelers = request.adults + request.kids + request.infants
+
+        # Default: supervisor & itinerary use Gemini; routing, critic, etc. use Groq
+        agent_providers = request.agent_providers or {
+            "supervisor": "gemini",
+            "itinerary": "gemini",
+        }
+
         initial_state = {
             "user_request": request.user_request,
             "provider": request.provider,
             "api_key": request.api_key or os.getenv("GROQ_API_KEY"),
-            "agent_providers": request.agent_providers or {},
+            "agent_providers": agent_providers,
             "adults": request.adults,
             "kids": request.kids,
             "infants": request.infants,
@@ -283,11 +290,17 @@ async def plan_trip(request: TripRequest) -> TripResponse:
         prev = await session_memory.load(request.session_id)
 
     travelers = request.adults + request.kids + request.infants
+
+    agent_providers = request.agent_providers or {
+        "supervisor": "gemini",
+        "itinerary": "gemini",
+    }
+
     initial_state = {
         "user_request": request.user_request,
         "provider": request.provider,
         "api_key": request.api_key or os.getenv("GROQ_API_KEY"),
-        "agent_providers": request.agent_providers or {},
+        "agent_providers": agent_providers,
         "adults": request.adults,
         "kids": request.kids,
         "infants": request.infants,

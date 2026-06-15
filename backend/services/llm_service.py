@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import asyncio
 import hashlib
@@ -54,7 +55,12 @@ def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, exp
     }
     provider = _aliases.get(_normalised, provider)
 
-    key = api_key if api_key and api_key.strip() else "missing-key"
+    if provider == "gemini":
+        key = api_key if api_key and api_key.strip() else os.getenv("GEMINI_API_KEY", "missing-key")
+    elif provider == "groq":
+        key = api_key if api_key and api_key.strip() else os.getenv("GROQ_API_KEY", "missing-key")
+    else:
+        key = api_key if api_key and api_key.strip() else "missing-key"
 
     if provider == "openai":
         return ChatOpenAI(model="gpt-4o-mini", temperature=temperature, api_key=key)
