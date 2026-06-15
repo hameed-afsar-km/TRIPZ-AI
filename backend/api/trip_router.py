@@ -355,29 +355,22 @@ def _agent_label(name: str) -> str:
     return labels.get(name, f"Running {name}...")
 
 
+AGENT_OUTPUT_KEYS = {
+    "supervisor_agent": ["destination", "origin", "travel_dates", "duration_days",
+                         "num_travelers", "adults", "kids", "infants",
+                         "budget", "currency", "preferences", "trip_style", "confidence_score"],
+    "routing_agent":    ["routing_decision"],
+    "budget_agent":     ["hotels", "budget_breakdown"],
+    "transit_agent":    ["weather", "transport"],
+    "curator_agent":    ["activities"],
+    "itinerary_agent":  ["itinerary"],
+    "critic_agent":     ["replan_instructions", "needs_replanning", "replan_count"],
+}
+
 def _sanitize_output(agent: str, output: dict) -> dict:
-    """Return a display-safe version of agent output (strip large blobs)."""
-    if not output or not isinstance(output, dict):
-        return {}
-    skip_keys = {"execution_trace", "warnings", "replan_instructions",
-                  "needs_replanning", "agent_providers", "previous_context",
-                  "user_request", "itinerary"}
-    result = {}
-    for k, v in output.items():
-        if k in skip_keys:
-            continue
-        if isinstance(v, (str, int, float, bool)):
-            result[k] = v
-        elif isinstance(v, list) and len(v) <= 15:
-            if all(isinstance(i, dict) for i in v):
-                result[k] = [{sk: sv for sk, sv in item.items() if not isinstance(sv, (list, dict)) or len(str(sv)) < 200} for item in v[:5]]
-            else:
-                result[k] = v[:10]
-        elif isinstance(v, dict):
-            result[k] = {sk: sv for sk, sv in v.items() if not isinstance(sv, (list, dict)) or len(str(sv)) < 200}
-        else:
-            result[k] = str(v)[:200]
-    return result
+    """Extract only the keys that this agent produced."""
+    keys = AGENT_OUTPUT_KEYS.get(agent, [])
+    return {k: output[k] for k in keys if k in output}
 
 
 def _extract_preview(agent: str, output: dict) -> dict:
