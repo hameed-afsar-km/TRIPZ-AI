@@ -363,7 +363,7 @@ AGENT_OUTPUT_KEYS = {
     "budget_agent":     ["hotels", "budget_breakdown"],
     "transit_agent":    ["weather", "transport"],
     "curator_agent":    ["activities"],
-    "itinerary_agent":  ["itinerary"],
+    "itinerary_agent":  ["itinerary"],  # returns {"markdown": "..."}
     "critic_agent":     ["replan_instructions", "needs_replanning", "replan_count"],
 }
 
@@ -396,5 +396,6 @@ def _extract_preview(agent: str, output: dict) -> dict:
         }
     if agent == "itinerary_agent":
         itin = output.get("itinerary", {})
-        return {"title": itin.get("title"), "days": len(itin.get("days", []))}
+        md = itin.get("markdown", "")
+        return {"markdown_len": len(md), "preview": md[:80] + "..." if len(md) > 80 else md}
     return {}
