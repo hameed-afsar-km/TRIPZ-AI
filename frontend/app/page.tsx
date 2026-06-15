@@ -648,7 +648,7 @@ export default function Home() {
             agent: "Planner",
             agentKey: "supervisor_agent",
             status: "completed",
-            text: "Request timed out after 120 seconds. The backend might be unavailable or overloaded.",
+            text: "Request timed out after 300 seconds. The backend might be unavailable or overloaded.",
             timestamp: new Date().toLocaleTimeString(),
             isError: true,
           }]);
@@ -947,7 +947,7 @@ export default function Home() {
 
                         <div className="flex-1 text-xs md:text-[13px] text-zinc-400 font-mono flex flex-col justify-center min-w-0 overflow-hidden">
                           {hasError ? (
-                            <span className="text-red-400 font-semibold">Error</span>
+                            <span className="text-red-400 font-semibold text-[11px] md:text-[12px] leading-relaxed line-clamp-2 break-words">{logs.find(l => l.isError)?.text || "Error"}</span>
                           ) : isCompleted ? (
                             <AgentOutputCard log={logs[logs.length - 1]} />
                           ) : isPending ? (

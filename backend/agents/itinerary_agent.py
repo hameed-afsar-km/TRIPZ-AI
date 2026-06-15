@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Dict
@@ -128,22 +129,29 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     prompt = ITINERARY_PROMPT_TEMPLATE.format(**inputs)
 
-    markdown = await call_llm(
-        role="itinerary",
-        prompt=prompt,
-        provider=resolve_provider(state, "itinerary"),
-        api_key=state.get("api_key"),
-        timeout=120,
-    )
-
-    if markdown.startswith("Error") or markdown.startswith("[") or "timed out" in markdown.lower():
-        logger.error("Itinerary LLM failed: %s", markdown[:200])
-        return {
-            **state,
-            "itinerary": {"error": markdown, "error_type": "llm_failure"},
-            "warnings": [f"Itinerary LLM failed: {markdown[:100]}"],
-            "execution_trace": ["itinerary_agent:failed"],
-        }
+    try:
+        markdown = await call_llm(
+            role="itinerary",
+            prompt=prompt,
+            provider=resolve_provider(state, "itinerary"),
+            api_key=state.get("api_key"),
+            timeout=120,
+        )
+    except asyncio.TimeoutError as e:
+        logger.error("Itinerary LLM timed out: %s", e)
+        return {**state, "itinerary": {"error": str(e), "error_type": "timeout"},
+                "warnings": [str(e)], "execution_trace": ["itinerary_agent:timeout"]}
+    except Exception as e:
+        msg = str(e)
+        logger.error("Itinerary LLM failed: %s", msg)
+        # Clean up the error message for display
+        if msg.startswith("[") and "]" in msg:
+            err_type = msg[1:msg.index("]")]
+            msg = msg[msg.index("]") + 1:].strip()
+        else:
+            err_type = "api_error"
+        return {**state, "itinerary": {"error": msg, "error_type": err_type},
+                "warnings": [msg], "execution_trace": ["itinerary_agent:failed"]}
 
     return {
         **state,
