@@ -127,10 +127,11 @@ async def call_llm(
 
     try:
         if callback and not expect_json:
-            async for chunk in asyncio.wait_for(llm.astream(messages), timeout=timeout):
-                if hasattr(chunk, "content") and chunk.content:
-                    await callback(chunk.content)
-                    full_content += chunk.content
+            async with asyncio.timeout(timeout):
+                async for chunk in llm.astream(messages):
+                    if hasattr(chunk, "content") and chunk.content:
+                        await callback(chunk.content)
+                        full_content += chunk.content
         else:
             response = await asyncio.wait_for(llm.ainvoke(messages), timeout=timeout)
             full_content = response.content
