@@ -1,9 +1,10 @@
 """
-Exchange Rate Service — live rates from Frankfurter API (free, no auth).
-No fallback table. If the live API fails, an error is raised.
+Exchange Rate Service — live rates from CurrencyFreaks API.
+Uses API key from CURRENCYFREAKS_API_KEY env var, with fallback to a hardcoded key.
 """
 
 import asyncio
+import os
 import time
 from typing import Dict
 import httpx
@@ -13,18 +14,28 @@ _cache_time: float = 0
 _CACHE_TTL: float = 3600
 _LOCK = asyncio.Lock()
 
-FRANKFURTER_URL = "https://api.frankfurter.app/latest?from=USD"
+CURRENCYFREAKS_URL = "https://api.currencyfreaks.com/v2.0/rates/latest"
+
+
+def _get_api_key() -> str:
+    return os.environ.get("CURRENCYFREAKS_API_KEY") or "887c63d845814cf393071843d3dd4025"
 
 
 async def fetch_live_rates() -> Dict[str, float]:
+    api_key = _get_api_key()
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(FRANKFURTER_URL)
+        resp = await client.get(
+            CURRENCYFREAKS_URL,
+            params={"apikey": api_key},
+        )
         resp.raise_for_status()
         data = resp.json()
-        return data.get("rates", {})
+        raw = data.get("rates", {})
+        return {k: float(v) for k, v in raw.items() if v != "N/A"}
 
 
 async def get_exchange_rate(target_currency: str) -> float:
+    global _cache_time
     target = target_currency.upper().strip()
     if target == "USD":
         return 1.0
@@ -42,7 +53,7 @@ async def get_exchange_rate(target_currency: str) -> float:
             return _cache[target]
 
     raise RuntimeError(f"Exchange rate for {target_currency} not available from live API. "
-                       f"The Frankfurter API at {FRANKFURTER_URL} did not return this currency.")
+                       f"The CurrencyFreaks API did not return this currency.")
 
 
 async def convert_price(price_usd: float, target_currency: str) -> float:
