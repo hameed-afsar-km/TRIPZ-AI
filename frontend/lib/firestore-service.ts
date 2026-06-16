@@ -44,6 +44,7 @@ export async function saveSession(
     {
       ...data,
       userId: user.uid,
+      timestamp: Math.floor(Date.now() / 1000),
       createdAt: serverTimestamp(),
     },
     { merge: true }
@@ -74,8 +75,10 @@ export async function updateSessionItinerary(
   destination?: string
 ) {
   const ref = sessionRef(user.uid, sessionId);
-  const update: any = { itinerary, timestamp: Date.now() };
+  const update: any = { itinerary, timestamp: Math.floor(Date.now() / 1000) };
+  update.createdAt = serverTimestamp();
   if (title) update.title = title;
   if (destination) update.destination = destination;
+  if (destination) update.destination_lower = destination.toLowerCase();
   await setDoc(ref, update, { merge: true });
 }
