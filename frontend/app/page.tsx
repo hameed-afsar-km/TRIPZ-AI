@@ -678,19 +678,20 @@ export default function Home() {
                   setActiveStep(4);
                   setSimulationStage("done");
                   setIsProcessing(false);
-                  if (!data.error_type) {
-                    lastTravelersRef.current = { ...travelersRef.current };
-                    // Save to Firestore if logged in
-                    if (user) {
-                      const title = (data.destination || userInput).slice(0, 60);
-                      fsUpdateItinerary(
-                        user,
-                        sessionId,
-                        data.itinerary || data,
-                        title,
-                        data.destination || "",
-                      ).catch(() => {});
-                    }
+                    if (!data.error_type) {
+                      lastTravelersRef.current = { ...travelersRef.current };
+                      // Save to Firestore if logged in
+                      if (user) {
+                        const title = (data.destination || userInput).slice(0, 60);
+                        fsUpdateItinerary(
+                          user,
+                          sessionId,
+                          data.itinerary || data,
+                          title,
+                          data.destination || "",
+                          userInput,
+                        ).catch((err) => console.error("Firestore save failed:", err));
+                      }
                   }
                 } else if (eventType === "error") {
                   setStreamingTokens("");

@@ -262,6 +262,9 @@ async def plan_trip_stream(request: TripRequest):
             yield _sse("done", {
                 "success": not bool(itin_error),
                 "itinerary": itin,
+                "destination": final_state.get("destination", ""),
+                "origin": final_state.get("origin", ""),
+                "user_request": final_state.get("user_request", ""),
                 "execution_trace": final_state.get("execution_trace", []),
                 "warnings": final_state.get("warnings", []),
                 "confidence_score": final_state.get("confidence_score", 0.0),

@@ -7,7 +7,6 @@ import {
   collection,
   query,
   orderBy,
-  serverTimestamp,
 } from "firebase/firestore";
 import { getFirebaseDb } from "./firebase";
 import type { User } from "firebase/auth";
@@ -33,24 +32,6 @@ function sessionRef(uid: string, sessionId: string) {
   return doc(getDb(), "users", uid, "sessions", sessionId);
 }
 
-export async function saveSession(
-  user: User,
-  sessionId: string,
-  data: Partial<ChatSession>
-) {
-  const ref = sessionRef(user.uid, sessionId);
-  await setDoc(
-    ref,
-    {
-      ...data,
-      userId: user.uid,
-      timestamp: Math.floor(Date.now() / 1000),
-      createdAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
-}
-
 export async function loadSession(user: User, sessionId: string) {
   const snap = await getDoc(sessionRef(user.uid, sessionId));
   if (!snap.exists()) return null;
@@ -62,7 +43,7 @@ export async function deleteSession(user: User, sessionId: string) {
 }
 
 export async function listSessions(user: User): Promise<ChatSession[]> {
-  const q = query(userSessionsRef(user.uid), orderBy("createdAt", "desc"));
+  const q = query(userSessionsRef(user.uid), orderBy("timestamp", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ session_id: d.id, ...d.data() } as ChatSession));
 }
@@ -72,13 +53,17 @@ export async function updateSessionItinerary(
   sessionId: string,
   itinerary: any,
   title?: string,
-  destination?: string
+  destination?: string,
+  userRequest?: string,
 ) {
   const ref = sessionRef(user.uid, sessionId);
-  const update: any = { itinerary, timestamp: Math.floor(Date.now() / 1000) };
-  update.createdAt = serverTimestamp();
+  const now = Math.floor(Date.now() / 1000);
+  const update: any = { itinerary, timestamp: now };
   if (title) update.title = title;
-  if (destination) update.destination = destination;
-  if (destination) update.destination_lower = destination.toLowerCase();
+  if (destination) {
+    update.destination = destination;
+    update.destination_lower = destination.toLowerCase();
+  }
+  if (userRequest) update.user_request = userRequest;
   await setDoc(ref, update, { merge: true });
 }
