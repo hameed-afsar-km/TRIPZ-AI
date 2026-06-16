@@ -111,7 +111,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     venue_issues_str = "No venues to validate."
     if venue_names:
         try:
-            validation = await validate_venues(venue_names, destination)
+            validation = await validate_venues(venue_names, destination, max_venues=10)
             venue_issues_str = _format_venue_issues(validation, destination)
         except Exception:
             venue_issues_str = "Venue validation unavailable."
@@ -133,7 +133,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         provider=resolve_provider(state, "critic"),
         api_key=state.get("api_key"),
         retries=0,
-        timeout=60,
+        timeout=30,
     )
 
     if "error" in result:

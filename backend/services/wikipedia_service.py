@@ -23,7 +23,7 @@ async def _query_page(title: str) -> Optional[Dict[str, Any]]:
         "redirects": 1,
     }
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=4) as client:
             resp = await client.get(WIKI_API, params=params, headers={"User-Agent": _USER_AGENT})
             if resp.status_code != 200:
                 return None
@@ -50,7 +50,7 @@ async def _search_wikipedia(query: str) -> Optional[str]:
         "srlimit": 3,
     }
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=4) as client:
             resp = await client.get(WIKI_API, params=params, headers={"User-Agent": _USER_AGENT})
             if resp.status_code == 200:
                 data = resp.json()
@@ -135,15 +135,29 @@ async def validate_venue(name: str, city: str) -> Dict[str, Any]:
     return result
 
 
-async def validate_venues(names: List[str], city: str) -> List[Dict[str, Any]]:
-    """Validate multiple venue names against Wikipedia in parallel (batched)."""
+async def validate_venues(names: List[str], city: str, max_venues: int = 10) -> List[Dict[str, Any]]:
+    """Validate multiple venue names against Wikipedia in parallel (batched).
+
+    Only validates the first `max_venues` unique names to keep latency reasonable.
+    """
+    seen = set()
+    unique = []
+    for n in names:
+        if n.lower() not in seen:
+            seen.add(n.lower())
+            unique.append(n)
+
+    unique = unique[:max_venues]
+
     results = []
-    for i in range(0, len(names), 5):
-        batch = names[i:i + 5]
+    for i in range(0, len(unique), 10):
+        batch = unique[i:i + 10]
         tasks = [validate_venue(name, city) for name in batch]
         batch_results = await asyncio.gather(*tasks, return_exceptions=True)
         for r in batch_results:
             if isinstance(r, dict):
+                r["_batch_size"] = len(names)
+                r["_validated_count"] = len(unique)
                 results.append(r)
             else:
                 results.append({"exists": False, "original_name": "unknown", "error": str(r)})

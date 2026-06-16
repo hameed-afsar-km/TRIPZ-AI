@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 from typing import Any, Dict
 
 from services.llm_service import call_llm, resolve_provider
@@ -126,7 +127,7 @@ def _format_hotels(hotels: list, currency: str = "USD") -> str:
     if not hotels:
         return "No hotels found."
     lines = []
-    for h in hotels[:5]:
+    for h in hotels[:10]:
         name = h.get("name", "Unknown")
         price = h.get("price_per_night") or h.get("price")
         stars = h.get("stars")
@@ -186,6 +187,46 @@ def _format_activities(activities: list, currency: str = "USD") -> str:
     return "\n".join(lines)
 
 
+_DAY_TOTAL_PATTERN = re.compile(r'\*\*Day total\*\*:\s*~\w+\s*([\d,]+(?:\.\d{1,2})?)', re.IGNORECASE)
+_RAW_PRICE_PATTERN = re.compile(r'~\s*(\w{3})\s*([\d,]+(?:\.\d{1,2})?)')
+
+
+def _check_budget(markdown: str, budget: float, currency: str) -> str:
+    """Check if the itinerary's day totals sum within budget.
+
+    Returns a warning string if exceeded, empty string otherwise.
+    """
+    total = 0.0
+    found = 0
+    for match in _DAY_TOTAL_PATTERN.finditer(markdown):
+        try:
+            total += float(match.group(1).replace(",", ""))
+            found += 1
+        except ValueError:
+            continue
+
+    if found == 0:
+        for match in _RAW_PRICE_PATTERN.finditer(markdown):
+            cur = match.group(1).upper()
+            if cur == currency.upper():
+                try:
+                    total += float(match.group(2).replace(",", ""))
+                except ValueError:
+                    continue
+
+    if total <= budget:
+        return ""
+
+    overshoot = total - budget
+    return (
+        f"⚠️ The total estimated cost (~{currency} {total:,.0f}) "
+        f"exceeds your budget of {currency} {budget:,.0f} "
+        f"by {currency} {overshoot:,.0f}. "
+        "Consider choosing a more affordable hotel, reducing premium activities, "
+        "or shortening the trip duration."
+    )
+
+
 async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     num_days = state.get("duration_days", 7)
     destination = state.get("destination", "Unknown")
@@ -206,6 +247,9 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             currency = original_currency
 
     budget_per_day = (total_budget / num_days) if num_days > 0 else total_budget
+
+    budget_in_dest_currency = total_budget
+    original_currency_for_warning = original_currency
 
     # Build a single formatted input string from all agent outputs
     inputs = {
@@ -253,8 +297,15 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         return {**state, "itinerary": {"error": msg, "error_type": err_type},
                 "warnings": [msg], "execution_trace": ["itinerary_agent:failed"]}
 
+    warnings = state.get("warnings", [])
+    if total_budget < 999999:
+        budget_warning = _check_budget(markdown, total_budget, currency)
+        if budget_warning:
+            warnings.append(budget_warning)
+
     return {
         **state,
         "itinerary": {"markdown": markdown},
+        "warnings": warnings,
         "execution_trace": ["itinerary_agent"],
     }

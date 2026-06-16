@@ -14,6 +14,16 @@ _SERPAPI_AVG_CACHE: Dict[str, float] = {}
 _XOTELO_CACHE: dict[str, float] = {}
 
 
+def _names_match(query: str, candidate: str) -> bool:
+    """Check if two hotel names refer to the same place using word overlap."""
+    q_words = {w for w in query.lower().split() if len(w) > 2}
+    c_words = {w for w in candidate.lower().split() if len(w) > 2}
+    if not q_words or not c_words:
+        return query.lower() in candidate.lower() or candidate.lower() in query.lower()
+    common = q_words & c_words
+    return len(common) >= max(1, len(q_words) // 2)
+
+
 def _average_price(results: List[Dict[str, Any]]) -> Optional[float]:
     prices = [r["price_per_night"] for r in results if r.get("price_per_night") is not None]
     if not prices:
@@ -59,12 +69,20 @@ async def get_hotel_price(
         serp_results = _SERPAPI_DEST_CACHE[cache_key]
 
     for h in serp_results:
-        if hotel_name.lower() in h.get("name", "").lower() or h.get("name", "").lower() in hotel_name.lower():
+        if _names_match(hotel_name, h.get("name", "")):
             price = h.get("price_per_night")
             if price is not None:
                 logger.info("Hotels price found via SerpAPI hotels: %s = %.2f %s", hotel_name, price, currency)
                 return float(price)
 
+    # SerpAPI Hotels had results but this hotel wasn't in them → skip expensive chain
+    if serp_results:
+        avg = _average_price(serp_results)
+        if avg is not None:
+            logger.info("Hotels price: using destination avg %.2f %s for %s (not found by name)", avg, currency, hotel_name)
+        return avg
+
+    # No SerpAPI results at all → try fallback chain
     xotelo = await _xotelo_fallback(hotel_name, destination, currency, chk_in, chk_out)
     if xotelo is not None:
         return xotelo
@@ -87,12 +105,8 @@ async def get_hotel_price(
         logger.info("Hotels price found via Jina: %s = %.2f %s", hotel_name, jina_price, currency)
         return jina_price
 
-    avg = _average_price(serp_results)
-    if avg is not None:
-        logger.info("Hotels price: using destination avg %.2f %s for %s", avg, currency, hotel_name)
-    else:
-        logger.warning("No price found for %s in %s after all fallbacks", hotel_name, destination)
-    return avg
+    logger.warning("No price found for %s in %s after all fallbacks", hotel_name, destination)
+    return None
 
 
 async def _xotelo_fallback(
