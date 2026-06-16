@@ -71,6 +71,7 @@ Total Budget: {currency} {budget} (approx. {currency} {budget_per_day}/day)
 Trip Style: {trip_type}
 Travelers: {adults} adults, {kids} kids, {infants} infants
 Preferences: {preferences}
+{replan_section}
 
 === HOTELS ===
 {hotels}
@@ -115,12 +116,23 @@ Then for each day: "## Day N: Theme" followed by bullet points in this structure
 **Afternoon**: [Venue/activity name](https://www.google.com/maps?q=lat,lon&z=15) — ~{currency} XX/pp
 **Evening**: [Venue/activity name](https://www.google.com/maps?q=lat,lon&z=15) — ~{currency} XX/pp · *Famous dish: ...* (if restaurant)
 **Food budget**: ~{currency} XX/pp for meals
-**Day total**: ~{currency} XX (accommodation {currency} XX + food {currency} XX + activities {currency} XX + transport {currency} XX)
+**Day total**: ~{currency} XX (food {currency} XX + activities {currency} XX + transport {currency} XX)
 *Tip: ...*
 
 After each day's section (including its tip), add a separator line `---` with a blank line before and after it to visually separate the days. For the last day, do NOT add a separator after it.
 
-Write the full raw markdown. Do NOT wrap in code blocks. Include ALL days."""
+Write the full raw markdown. Do NOT wrap in code blocks. Include ALL days.
+
+After the last day, add a `---` separator, then a **Final Cost Summary** section:
+```
+**Accommodation**: {num_days} nights × {currency} XX/night = {currency} YY
+**Food (total)**: ~{currency} ZZ
+**Activities (total)**: ~{currency} WW
+**Transport (total)**: ~{currency} VV
+**Grand Total**: ~{currency} TT
+```
+Accommodation is `nights × price_per_night`. Food/Activities/Transport should be summed from your day totals. Grand Total = accommodation + food + activities + transport."""
+
 
 
 def _format_hotels(hotels: list, currency: str = "USD") -> str:
@@ -189,21 +201,32 @@ def _format_activities(activities: list, currency: str = "USD") -> str:
 
 _DAY_TOTAL_PATTERN = re.compile(r'\*\*Day total\*\*:\s*~\w+\s*([\d,]+(?:\.\d{1,2})?)', re.IGNORECASE)
 _RAW_PRICE_PATTERN = re.compile(r'~\s*(\w{3})\s*([\d,]+(?:\.\d{1,2})?)')
+_GRAND_TOTAL_PATTERN = re.compile(r'\*\*Grand Total\*\*:\s*~\w+\s*([\d,]+(?:\.\d{1,2})?)', re.IGNORECASE)
 
 
 def _check_budget(markdown: str, budget: float, currency: str) -> str:
-    """Check if the itinerary's day totals sum within budget.
+    """Check if the itinerary's grand total or day totals sum within budget.
 
     Returns a warning string if exceeded, empty string otherwise.
     """
     total = 0.0
     found = 0
-    for match in _DAY_TOTAL_PATTERN.finditer(markdown):
+
+    grand_total_match = _GRAND_TOTAL_PATTERN.search(markdown)
+    if grand_total_match:
         try:
-            total += float(match.group(1).replace(",", ""))
-            found += 1
+            total = float(grand_total_match.group(1).replace(",", ""))
+            found = 1
         except ValueError:
-            continue
+            pass
+
+    if found == 0:
+        for match in _DAY_TOTAL_PATTERN.finditer(markdown):
+            try:
+                total += float(match.group(1).replace(",", ""))
+                found += 1
+            except ValueError:
+                continue
 
     if found == 0:
         for match in _RAW_PRICE_PATTERN.finditer(markdown):
@@ -219,7 +242,7 @@ def _check_budget(markdown: str, budget: float, currency: str) -> str:
 
     overshoot = total - budget
     return (
-        f"⚠️ The total estimated cost (~{currency} {total:,.0f}) "
+        f"The total estimated cost (~{currency} {total:,.0f}) "
         f"exceeds your budget of {currency} {budget:,.0f} "
         f"by {currency} {overshoot:,.0f}. "
         "Consider choosing a more affordable hotel, reducing premium activities, "
@@ -251,6 +274,19 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     budget_in_dest_currency = total_budget
     original_currency_for_warning = original_currency
 
+    # Build replan instructions section (if this is a replan)
+    replan_instructions = state.get("replan_instructions", "").strip()
+    replan_section = ""
+    if replan_instructions:
+        replan_count = state.get("replan_count", 0)
+        replan_section = (
+            f"\n=== REPLAN FEEDBACK (attempt #{replan_count}) ===\n"
+            f"The previous version was rejected. Please fix the following:\n"
+            f"{replan_instructions}\n"
+            "IMPORTANT: Use ONLY real venue names from the Activities list below. "
+            "Do NOT invent attractions or venues."
+        )
+
     # Build a single formatted input string from all agent outputs
     inputs = {
         "destination": destination,
@@ -269,6 +305,7 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         "weather": _format_weather(state.get("weather", {})),
         "transport": _format_transport(state.get("transport", {})),
         "activities": _format_activities(state.get("activities", []), currency),
+        "replan_section": replan_section,
     }
 
     prompt = ITINERARY_PROMPT_TEMPLATE.format(**inputs)

@@ -78,7 +78,7 @@ async def geocode_city(city: str) -> Optional[Dict[str, Any]]:
             _inflight.pop(key, None)
 
     if result:
-        MAX_BBOX_RADIUS = 0.5
+        MAX_BBOX_RADIUS = 0.2
         lat, lon = result["lat"], result["lon"]
         result["bbox"] = (
             lat - MAX_BBOX_RADIUS,
@@ -90,6 +90,35 @@ async def geocode_city(city: str) -> Optional[Dict[str, Any]]:
         async with _LOCK:
             _cache[key] = result
     return result
+
+
+_NEIGHBOR_CITIES = {
+    "dubai": ["sharjah", "abu dhabi", "ajman", "ras al khaimah", "fujairah", "umm al quwain"],
+    "abu dhabi": ["dubai", "sharjah", "ajman", "al ain"],
+    "mumbai": ["navi mumbai", "thane", "pune"],
+    "delhi": ["gurgaon", "noida", "ghaziabad", "faridabad"],
+    "bangkok": ["nonthaburi", "samut prakan", "pathum thani"],
+    "paris": ["issy-les-moulineaux", "boulogne-billancourt", "montreuil", "saint-denis"],
+    "london": ["greenwich", "croydon", "brent", "ealing"],
+}
+
+
+def _is_in_correct_city(tags: Dict[str, Any], destination: str, venue_name: str = "") -> bool:
+    """Filter out venues whose OSM address or name says a different city."""
+    dest_lower = destination.lower().strip()
+
+    addr_city = (tags.get("addr:city") or "").strip().lower()
+    if addr_city and dest_lower not in addr_city and addr_city not in dest_lower:
+        return False
+
+    name_lower = venue_name.lower().strip()
+    excluded = _NEIGHBOR_CITIES.get(dest_lower, [])
+    if excluded:
+        for neighbor in excluded:
+            if neighbor in name_lower or name_lower in neighbor:
+                return False
+
+    return True
 
 
 async def _overpass_query(query: str, timeout_sec: int = 15) -> List[Dict[str, Any]]:
@@ -191,6 +220,8 @@ async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
         name = _best_name(tags)
         if not name or name.lower() in seen_names:
             continue
+        if not _is_in_correct_city(tags, destination, name):
+            continue
         seen_names.add(name.lower())
 
         osm_type = (
@@ -251,6 +282,8 @@ async def fetch_hotels(destination: str) -> List[Dict[str, Any]]:
         tags = el.get("tags", {})
         name = _best_name(tags)
         if not name or name.lower() in seen:
+            continue
+        if not _is_in_correct_city(tags, destination, name):
             continue
         seen.add(name.lower())
 
