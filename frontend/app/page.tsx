@@ -5,6 +5,8 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 import { PromptInputBox } from "@/components/ui/ai-prompt-box";
 import { HistorySidebar } from "@/components/ui/history-sidebar";
 import ShootingStarsOverlay from "@/components/ui/shooting-stars-overlay";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Compass,
   Sparkles,
@@ -1021,10 +1023,23 @@ export default function Home() {
                           <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-600/20 mt-1">
                             <Bot className="w-4 h-4 text-white" />
                           </div>
-                          <div className="flex-1 bg-zinc-900/60 p-6 rounded-3xl border border-zinc-800/60 backdrop-blur-md text-sm leading-relaxed text-zinc-300 space-y-2">
-                            {itineraryResult.itinerary.markdown.split('\n').map((line: string, i: number) => (
-                              <p key={i}>{line}</p>
-                            ))}
+                          <div className="flex-1 bg-zinc-900/60 p-6 rounded-3xl border border-zinc-800/60 backdrop-blur-md text-sm text-zinc-300">
+                            <div className="prose prose-invert prose-sm max-w-none
+                              prose-headings:text-orange-400 prose-headings:font-bold
+                              prose-h1:text-2xl prose-h1:mb-4 prose-h1:mt-2
+                              prose-h2:text-xl prose-h2:mb-3 prose-h2:mt-4
+                              prose-h3:text-lg prose-h3:mb-2 prose-h3:mt-3
+                              prose-strong:text-orange-300 prose-strong:font-semibold
+                              prose-ul:list-disc prose-ul:pl-5 prose-ul:space-y-1
+                              prose-li:marker:text-orange-500
+                              prose-p:leading-relaxed prose-p:mb-2
+                              prose-hr:border-zinc-700 prose-hr:my-4
+                              prose-code:text-orange-200 prose-code:bg-zinc-800 prose-code:px-1 prose-code:rounded
+                              prose-pre:bg-zinc-800 prose-pre:border prose-pre:border-zinc-700">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {itineraryResult.itinerary.markdown}
+                              </ReactMarkdown>
+                            </div>
                           </div>
                         </div>
                       ) : (
