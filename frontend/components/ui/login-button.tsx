@@ -20,6 +20,7 @@ export default function LoginButton() {
             <img
               src={user.photoURL}
               alt={user.displayName || "User"}
+              referrerPolicy="no-referrer"
               className="w-7 h-7 rounded-full object-cover"
             />
           ) : (

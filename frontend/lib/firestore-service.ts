@@ -7,10 +7,9 @@ import {
   collection,
   query,
   orderBy,
-  Timestamp,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { getFirebaseDb } from "./firebase";
 import type { User } from "firebase/auth";
 
 export interface ChatSession {
@@ -22,12 +21,16 @@ export interface ChatSession {
   messages?: any[];
 }
 
+function getDb() {
+  return getFirebaseDb();
+}
+
 function userSessionsRef(uid: string) {
-  return collection(db, "users", uid, "sessions");
+  return collection(getDb(), "users", uid, "sessions");
 }
 
 function sessionRef(uid: string, sessionId: string) {
-  return doc(db, "users", uid, "sessions", sessionId);
+  return doc(getDb(), "users", uid, "sessions", sessionId);
 }
 
 export async function saveSession(
