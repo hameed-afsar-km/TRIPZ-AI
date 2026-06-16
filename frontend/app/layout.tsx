@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth-context";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +31,9 @@ export default function RootLayout({
       <head>
         <link href="https://fonts.cdnfonts.com/css/kenyan-coffee" rel="stylesheet" />
       </head>
-      <body className="min-h-full flex flex-col bg-[#09090b] text-[#f4f4f5]">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#09090b] text-[#f4f4f5]">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

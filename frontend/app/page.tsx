@@ -1,12 +1,21 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { PromptInputBox } from "@/components/ui/ai-prompt-box";
 import { HistorySidebar } from "@/components/ui/history-sidebar";
 import ShootingStarsOverlay from "@/components/ui/shooting-stars-overlay";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import LoginButton from "@/components/ui/login-button";
+import { useAuth } from "@/lib/auth-context";
+import {
+  listSessions as fsListSessions,
+  loadSession as fsLoadSession,
+  deleteSession as fsDeleteSession,
+  updateSessionItinerary as fsUpdateItinerary,
+  type ChatSession,
+} from "@/lib/firestore-service";
 import {
   Compass,
   Sparkles,
@@ -446,6 +455,9 @@ export default function Home() {
     adults: number; kids: number; infants: number; tripStyle: string;
   } | null>(null);
 
+  // Auth
+  const { user, loading: authLoading } = useAuth();
+
   // Session / History state
   const [sessionId] = useState(() =>
     typeof crypto !== "undefined" && crypto.randomUUID
@@ -453,8 +465,21 @@ export default function Home() {
       : "session-" + Date.now()
   );
   const [showHistory, setShowHistory] = useState(false);
-  const [historySessions, setHistorySessions] = useState<any[]>([]);
+  const [historySessions, setHistorySessions] = useState<ChatSession[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Load Firestore sessions when user logs in
+  useEffect(() => {
+    if (user) {
+      setHistoryLoading(true);
+      fsListSessions(user)
+        .then(setHistorySessions)
+        .catch(() => {})
+        .finally(() => setHistoryLoading(false));
+    } else {
+      setHistorySessions([]);
+    }
+  }, [user]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -621,6 +646,17 @@ export default function Home() {
                   setIsProcessing(false);
                   if (!data.error_type) {
                     lastTravelersRef.current = { ...travelersRef.current };
+                    // Save to Firestore if logged in
+                    if (user) {
+                      const title = (data.destination || userInput).slice(0, 60);
+                      fsUpdateItinerary(
+                        user,
+                        sessionId,
+                        data.itinerary || data,
+                        title,
+                        data.destination || "",
+                      ).catch(() => {});
+                    }
                   }
                 } else if (eventType === "error") {
                   setStreamingTokens("");
@@ -717,17 +753,22 @@ export default function Home() {
   const fetchSessions = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const res = await fetch("/api/v1/sessions");
-      if (res.ok) {
-        const data = await res.json();
-        setHistorySessions(data.sessions || []);
+      if (user) {
+        const sessions = await fsListSessions(user);
+        setHistorySessions(sessions);
+      } else {
+        const res = await fetch("/api/v1/sessions");
+        if (res.ok) {
+          const data = await res.json();
+          setHistorySessions(data.sessions || []);
+        }
       }
     } catch {
       // silently fail
     } finally {
       setHistoryLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const handleHistoryToggle = useCallback(() => {
     setShowHistory((prev) => {
@@ -738,27 +779,41 @@ export default function Home() {
 
   const handleSelectSession = useCallback(async (sid: string) => {
     try {
-      const res = await fetch(`/api/v1/sessions/${sid}`);
-      if (res.ok) {
-        const data = await res.json();
-        setItineraryResult({ itinerary: data.itinerary });
-        setSimulationStage("done");
-        setShowHistory(false);
-        setActiveStep(4);
+      if (user) {
+        const session = await fsLoadSession(user, sid);
+        if (session) {
+          setItineraryResult({ itinerary: session.itinerary });
+          setSimulationStage("done");
+          setShowHistory(false);
+          setActiveStep(4);
+        }
+      } else {
+        const res = await fetch(`/api/v1/sessions/${sid}`);
+        if (res.ok) {
+          const data = await res.json();
+          setItineraryResult({ itinerary: data.itinerary });
+          setSimulationStage("done");
+          setShowHistory(false);
+          setActiveStep(4);
+        }
       }
     } catch {
       // silently fail
     }
-  }, []);
+  }, [user]);
 
   const handleDeleteSession = useCallback(async (sid: string) => {
     try {
-      await fetch(`/api/v1/sessions/${sid}`, { method: "DELETE" });
+      if (user) {
+        await fsDeleteSession(user, sid);
+      } else {
+        await fetch(`/api/v1/sessions/${sid}`, { method: "DELETE" });
+      }
       setHistorySessions((prev) => prev.filter((s) => s.session_id !== sid));
     } catch {
       // silently fail
     }
-  }, []);
+  }, [user]);
 
   const bentoAgents = [
     { name: "Planner", icon: Compass, step: 0 },
@@ -790,21 +845,26 @@ export default function Home() {
         loading={historyLoading}
       />
 
-      <div className="absolute top-0 left-0 right-0 z-50 flex justify-center py-4 pointer-events-none">
-        <AnimatePresence>
-          {simulationStage !== "idle" && (
-            <motion.div
-              layoutId="tripz-logo-container"
-              initial={{ opacity: 0, y: -20, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20 }}
-            >
-              <span className="inline-block font-kenyan italic font-black text-4xl tracking-widest text-orange-500 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)] pointer-events-auto">
-                TRIPZ
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-4 md:px-8 py-4">
+        <div className="pointer-events-auto">
+          <AnimatePresence>
+            {simulationStage !== "idle" && (
+              <motion.div
+                layoutId="tripz-logo-container"
+                initial={{ opacity: 0, y: -20, scale: 0.8 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 20 }}
+              >
+                <span className="inline-block font-kenyan italic font-black text-4xl tracking-widest text-orange-500 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)]">
+                  TRIPZ
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        <div className="pointer-events-auto flex items-center gap-2">
+          {!authLoading && <LoginButton />}
+        </div>
       </div>
 
       <div className="flex-1 max-w-5xl w-full mx-auto flex flex-col relative z-10 h-full p-4 md:p-6 pt-20">
