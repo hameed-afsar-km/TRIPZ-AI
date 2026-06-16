@@ -32,6 +32,8 @@ import {
   Sunrise,
   Clock,
   Navigation,
+  Copy,
+  Check,
 } from "lucide-react";
 
 interface AgentMessage {
@@ -426,6 +428,38 @@ function ItineraryBoard({ itinerary, warnings, duration_ms }: ItineraryBoardProp
           </motion.div>
         )}
       </div>
+    </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex justify-end mt-4">
+      <button
+        onClick={handleCopy}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-all"
+        title="Copy response"
+      >
+        {copied ? (
+          <>
+            <Check className="w-3.5 h-3.5 text-green-400" />
+            <span className="text-green-400">Copied!</span>
+          </>
+        ) : (
+          <>
+            <Copy className="w-3.5 h-3.5" />
+            <span>Copy</span>
+          </>
+        )}
+      </button>
     </div>
   );
 }
@@ -1100,6 +1134,7 @@ export default function Home() {
                                 {itineraryResult.itinerary.markdown}
                               </ReactMarkdown>
                             </div>
+                            <CopyButton text={itineraryResult.itinerary.markdown} />
                           </div>
                         </div>
                       ) : (

@@ -122,7 +122,7 @@ After each day's section (including its tip), add a separator line `---` with a 
 Write the full raw markdown. Do NOT wrap in code blocks. Include ALL days."""
 
 
-def _format_hotels(hotels: list) -> str:
+def _format_hotels(hotels: list, currency: str = "USD") -> str:
     if not hotels:
         return "No hotels found."
     lines = []
@@ -136,7 +136,7 @@ def _format_hotels(hotels: list) -> str:
         if stars:
             line += f" — {stars}★"
         if price:
-            line += f" — ${price}/night"
+            line += f" — {currency} {price}/night"
         else:
             line += " — price unknown"
         if rating:
@@ -167,7 +167,7 @@ def _format_transport(transport: dict) -> str:
     return f"- Route: {origin} → {destination}\n- Distance: {dist} km\n- Typical flight time: approx. {max(1, round(dist / 800))}h by air"
 
 
-def _format_activities(activities: list) -> str:
+def _format_activities(activities: list, currency: str = "USD") -> str:
     if not activities:
         return "No activities found."
     lines = []
@@ -179,7 +179,7 @@ def _format_activities(activities: list) -> str:
         lon = a.get("lon")
         indoor = a.get("indoor", False)
         desc = a.get("description", "")
-        cost_str = f" (~${cost})" if cost else " (cost unknown)"
+        cost_str = f" (~{currency} {cost})" if cost else " (cost unknown)"
         coords = f" [{lat},{lon}]" if lat and lon else ""
         indoor_str = " [indoor]" if indoor else ""
         lines.append(f"- {name} [{cat}]{cost_str}{coords}{indoor_str} — {desc}")
@@ -221,10 +221,10 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         "adults": state.get("adults", 1),
         "kids": state.get("kids", 0),
         "infants": state.get("infants", 0),
-        "hotels": _format_hotels(state.get("hotels", [])),
+        "hotels": _format_hotels(state.get("hotels", []), currency),
         "weather": _format_weather(state.get("weather", {})),
         "transport": _format_transport(state.get("transport", {})),
-        "activities": _format_activities(state.get("activities", [])),
+        "activities": _format_activities(state.get("activities", []), currency),
     }
 
     prompt = ITINERARY_PROMPT_TEMPLATE.format(**inputs)

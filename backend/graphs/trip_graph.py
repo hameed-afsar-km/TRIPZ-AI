@@ -104,8 +104,17 @@ def build_graph() -> StateGraph:
     graph.add_edge("curator_agent",       "itinerary_agent")
     graph.add_edge("routing_agent",       "itinerary_agent")
 
-    # itinerary → END (critic/replan loop disabled for now)
-    graph.add_edge("itinerary_agent",      END)
+    # itinerary → critic → (conditional replan or END)
+    graph.add_edge("itinerary_agent",      "critic_agent")
+
+    graph.add_conditional_edges(
+        "critic_agent",
+        route_after_critic,
+        {
+            "itinerary_agent": "itinerary_agent",
+            "__end__": END,
+        },
+    )
 
     # clarify → END
     graph.add_edge("clarify_node",        END)

@@ -3,7 +3,9 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from services.serpapi_service import search_hotels
+from services.serpapi_service import search_hotels, search_web, extract_price_from_snippets
+from services.duckduckgo_service import search_hotel_price as ddg_search_price
+from services.jina_scraper import scrape_hotel_price as jina_search_price
 
 logger = logging.getLogger("tripz.agents")
 
@@ -60,13 +62,36 @@ async def get_hotel_price(
         if hotel_name.lower() in h.get("name", "").lower() or h.get("name", "").lower() in hotel_name.lower():
             price = h.get("price_per_night")
             if price is not None:
+                logger.info("Hotels price found via SerpAPI hotels: %s = %.2f %s", hotel_name, price, currency)
                 return float(price)
 
     xotelo = await _xotelo_fallback(hotel_name, destination, currency, chk_in, chk_out)
     if xotelo is not None:
         return xotelo
 
+    serp_snippets = await search_web(f"{hotel_name} {destination} price per night")
+    if serp_snippets:
+        snippet_texts = [s.get("snippet", "") + " " + s.get("title", "") for s in serp_snippets]
+        price = extract_price_from_snippets(snippet_texts, currency)
+        if price is not None:
+            logger.info("Hotels price found via SerpAPI web: %s = %.2f %s", hotel_name, price, currency)
+            return price
+
+    ddg_price = await ddg_search_price(hotel_name, destination, currency)
+    if ddg_price is not None:
+        logger.info("Hotels price found via DuckDuckGo: %s = %.2f %s", hotel_name, ddg_price, currency)
+        return ddg_price
+
+    jina_price = await jina_search_price(hotel_name, destination, currency)
+    if jina_price is not None:
+        logger.info("Hotels price found via Jina: %s = %.2f %s", hotel_name, jina_price, currency)
+        return jina_price
+
     avg = _average_price(serp_results)
+    if avg is not None:
+        logger.info("Hotels price: using destination avg %.2f %s for %s", avg, currency, hotel_name)
+    else:
+        logger.warning("No price found for %s in %s after all fallbacks", hotel_name, destination)
     return avg
 
 

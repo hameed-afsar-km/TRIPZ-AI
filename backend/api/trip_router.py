@@ -60,10 +60,11 @@ async def plan_trip_stream(request: TripRequest):
 
         travelers = request.adults + request.kids + request.infants
 
-        # Default: supervisor & itinerary use Gemini; routing, critic, etc. use Groq
+        # Default: supervisor, itinerary & critic use Gemini; routing, budget, etc. use Groq
         agent_providers = request.agent_providers or {
             "supervisor": "gemini",
             "itinerary": "gemini",
+            "critic": "gemini",
         }
 
         initial_state = {
@@ -297,6 +298,7 @@ async def plan_trip(request: TripRequest) -> TripResponse:
     agent_providers = request.agent_providers or {
         "supervisor": "gemini",
         "itinerary": "gemini",
+        "critic": "gemini",
     }
 
     initial_state = {

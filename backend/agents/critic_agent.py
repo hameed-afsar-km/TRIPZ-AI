@@ -1,10 +1,15 @@
 import json
+import re
 from typing import Any, Dict, List
+
 from services.llm_service import call_llm_json, resolve_provider
+from services.wikipedia_service import validate_venues
+
 
 CRITIC_SYSTEM = """You are a strict travel itinerary reviewer.
 Check for: vague descriptions, repeated text, wrong day count, wrong currency, budget issues, lack of variety.
 Output ONLY valid JSON."""
+
 
 CRITIC_PROMPT_TEMPLATE = """Review this {num_days}-day itinerary for {destination}:
 
@@ -15,6 +20,9 @@ Trip details:
 - Requested days: {num_days}
 - Preferences: {preferences}
 
+Venue validation results (from Wikipedia):
+{venue_issues}
+
 Check for these issues:
 1. Vague descriptions — any "Relax at the hotel", "Explore the city", "Visit local attractions", "Enjoy dinner" with no specific name = FAIL
 2. Repeated text — same morning/afternoon/evening appearing on multiple days = FAIL
@@ -22,6 +30,7 @@ Check for these issues:
 4. Wrong currency — if prices use a different currency than {currency} = FAIL
 5. Budget mismatch — if total cost far exceeds budget = FAIL
 6. Missing variety — if same theme repeats every day = FAIL
+7. Fake venues — if the venue validation found non-existent places, flag them = FAIL
 
 Return JSON:
 {{"pass":true,"issues":[],"feedback":"","needs_replanning":false}}
@@ -30,6 +39,45 @@ Return JSON:
 - issues: list of specific problems found (empty if pass)
 - feedback: detailed instructions for what to fix (empty if pass)
 - needs_replanning: true if issues are severe enough to regenerate"""
+
+
+_VENUE_PATTERN = re.compile(r'\[([^\]]+)\]\(https?://(?:www\.)?google\.com/maps\?q=([^)]+)\)')
+
+
+def _extract_venue_names(markdown: str) -> List[str]:
+    """Extract venue names from Google Maps links in the itinerary markdown."""
+    names = []
+    for match in _VENUE_PATTERN.finditer(markdown):
+        name = match.group(1).strip()
+        if name and len(name) > 2:
+            names.append(name)
+    return list(dict.fromkeys(names))  # deduplicate preserving order
+
+
+def _format_venue_issues(validation_results: List[Dict[str, Any]], destination: str = "") -> str:
+    """Format venue validation results for the critic prompt."""
+    if not validation_results:
+        return "No venues found to validate."
+
+    lines = []
+    for v in validation_results:
+        original = v.get("original_name", "?")
+        exists = v.get("exists", False)
+        correct = v.get("correct_name")
+        hint = v.get("city_hint")
+
+        if not exists:
+            lines.append(f"- NOT FOUND: \"{original}\" — this venue does not appear to exist on Wikipedia")
+        elif correct and correct.lower() != original.lower():
+            lines.append(f"- MISNAMED: \"{original}\" → Wikipedia page is \"{correct}\" (check if this is the right place)")
+        elif hint and destination and destination.lower() not in hint.lower():
+            lines.append(f"- WRONG CITY: \"{original}\" — likely not in {destination}")
+        else:
+            lines.append(f"- OK: \"{original}\"")
+
+    if not lines:
+        return "No venues found to validate."
+    return "\n".join(lines)
 
 
 async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -57,6 +105,17 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "execution_trace": ["critic_agent:max_replan"],
         }
 
+    markdown = itinerary.get("markdown", "")
+    venue_names = _extract_venue_names(markdown)
+
+    venue_issues_str = "No venues to validate."
+    if venue_names:
+        try:
+            validation = await validate_venues(venue_names, destination)
+            venue_issues_str = _format_venue_issues(validation, destination)
+        except Exception:
+            venue_issues_str = "Venue validation unavailable."
+
     prompt = CRITIC_PROMPT_TEMPLATE.format(
         num_days=num_days,
         destination=destination,
@@ -64,6 +123,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         currency=currency,
         budget=f"{budget:,.0f}" if budget < 999999 else "Unlimited",
         preferences=", ".join(preferences) or "general",
+        venue_issues=venue_issues_str,
     )
 
     result = await call_llm_json(
