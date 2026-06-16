@@ -11,3 +11,4 @@ langchain-google-genai
 langchain-groq
 langchain-community
 langchain-ollama
+duckduckgo_search>=8.0.0
