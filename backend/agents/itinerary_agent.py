@@ -94,7 +94,7 @@ IMPORTANT — You MUST include the following in the output for EACH day:
 
 1. **Budget per day**: Show a clear budget allocation for each day (accommodation, food, activities, transport, misc). Ensure the SUM of all daily budgets stays within the Total Budget above. If the user explicitly mentioned a budget amount for a specific place or activity, use that amount primarily.
 
-2. **Google Maps link for each venue**: For each activity/venue, include a Google Maps link using its coordinates: `[Venue Name](https://www.google.com/maps?q=lat,lon)`. Coordinates are provided in the Activities section.
+2. **Google Maps link for each venue**: For each activity/venue, include a Google Maps link using the EXACT coordinates provided in the Activities section below. Do NOT guess or substitute coordinates — use only the `[lat,lon]` values shown next to each venue. Format: `[Venue Name](https://www.google.com/maps?q=lat,lon&z=15)`
 
 3. **Budget for each place**: Show an estimated cost in {currency} next to each venue/activity (use real pricing from the data if available, otherwise estimate based on the venue type and location).
 
@@ -110,9 +110,9 @@ OUTPUT FORMAT:
 Start with "# {num_days}-Day Trip to {destination}"
 Then for each day: "## Day N: Theme" followed by bullet points in this structure:
 
-**Morning**: [Venue/activity name](https://www.google.com/maps?q=lat,lon) — ~{currency} XX/pp · *Famous dish: ...* (if restaurant)
-**Afternoon**: [Venue/activity name](https://www.google.com/maps?q=lat,lon) — ~{currency} XX/pp
-**Evening**: [Venue/activity name](https://www.google.com/maps?q=lat,lon) — ~{currency} XX/pp · *Famous dish: ...* (if restaurant)
+**Morning**: [Venue/activity name](https://www.google.com/maps?q=lat,lon&z=15) — ~{currency} XX/pp · *Famous dish: ...* (if restaurant)
+**Afternoon**: [Venue/activity name](https://www.google.com/maps?q=lat,lon&z=15) — ~{currency} XX/pp
+**Evening**: [Venue/activity name](https://www.google.com/maps?q=lat,lon&z=15) — ~{currency} XX/pp · *Famous dish: ...* (if restaurant)
 **Food budget**: ~{currency} XX/pp for meals
 **Day total**: ~{currency} XX (accommodation {currency} XX + food {currency} XX + activities {currency} XX + transport {currency} XX)
 *Tip: ...*
@@ -192,9 +192,20 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     origin = state.get("origin", "Unknown")
 
     total_budget = state.get("budget", 3000)
-    budget_per_day = (total_budget / num_days) if num_days > 0 else total_budget
+    original_currency = state.get("currency", "USD")
+    currency = _resolve_destination_currency(destination) or original_currency
 
-    currency = _resolve_destination_currency(destination) or state.get("currency", "USD")
+    # Convert budget to destination currency if they differ
+    if currency != original_currency and total_budget < 999999:
+        try:
+            from services.exchange_service import convert_between_currencies
+            converted = await convert_between_currencies(total_budget, original_currency, currency)
+            total_budget = round(converted, 0)
+        except Exception:
+            logger.warning("Currency conversion failed, using original budget as-is")
+            currency = original_currency
+
+    budget_per_day = (total_budget / num_days) if num_days > 0 else total_budget
 
     # Build a single formatted input string from all agent outputs
     inputs = {

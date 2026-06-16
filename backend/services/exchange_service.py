@@ -50,3 +50,17 @@ async def convert_price(price_usd: float, target_currency: str) -> float:
         return 0.0
     rate = await get_exchange_rate(target_currency)
     return round(price_usd * rate, 2)
+
+
+async def convert_between_currencies(amount: float, from_currency: str, to_currency: str) -> float:
+    if from_currency.upper() == to_currency.upper():
+        return amount
+    if from_currency.upper() == "USD":
+        return await convert_price(amount, to_currency)
+    rate_from = await get_exchange_rate(from_currency.upper())
+    if rate_from == 0:
+        return amount
+    amount_usd = amount / rate_from
+    if to_currency.upper() == "USD":
+        return round(amount_usd, 2)
+    return await convert_price(amount_usd, to_currency)

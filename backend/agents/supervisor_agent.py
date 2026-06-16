@@ -130,15 +130,27 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         # Detect "any budget" or "all places"
         if re.search(r'\b(?:any|unlimited|no\s+limit)\s+budget\b', raw, re.IGNORECASE):
             fallback_budget = 999999
-        # Try to extract explicit budget amount with currency
-        m_budget = re.search(r'(\d[\d,]*)\s*(?:rupees|rs|inr|usd|\$|euros?|dollars?)\b', raw, re.IGNORECASE)
+        # Try to extract explicit budget amount with currency (handles 2L, 5Cr, 2 Lakh, 5 Crore)
+        m_budget = re.search(r'(\d[\d,]*)\s*(L|lakh|crore|cr|rupees|rs|inr|usd|\$|euros?|dollars?)\b', raw, re.IGNORECASE)
         if m_budget:
-            fallback_budget = float(m_budget.group(1).replace(",", ""))
-        # Try to extract bare number near budget context
+            val = float(m_budget.group(1).replace(",", ""))
+            unit = m_budget.group(2).lower()
+            if unit in ("l", "lakh"):
+                val *= 100000
+            elif unit in ("cr", "crore"):
+                val *= 10000000
+            fallback_budget = val
+        # Try to extract bare number near budget context (including 2L, 5Cr without explicit currency keyword)
         if not m_budget:
-            m_bare = re.search(r'\b(?:budget|spend|cost)\s*(?:of\s*)?(\d[\d,]*)\b', raw, re.IGNORECASE)
+            m_bare = re.search(r'\b(?:budget|spend|cost)\s*(?:of\s*)?(\d[\d,]*)\s*(L|lakh|crore|cr)?\b', raw, re.IGNORECASE)
             if m_bare:
-                fallback_budget = float(m_bare.group(1).replace(",", ""))
+                val = float(m_bare.group(1).replace(",", ""))
+                unit = (m_bare.group(2) or "").lower()
+                if unit in ("l", "lakh"):
+                    val *= 100000
+                elif unit in ("cr", "crore"):
+                    val *= 10000000
+                fallback_budget = val
         if re.search(r'\b(?:visit|explore|see)\s+(?:all|every)\b', raw, re.IGNORECASE):
             fallback_preferences.append("visit all places")
 
@@ -189,9 +201,15 @@ async def supervisor_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     # # extract it from the raw request (qwen2.5 often gets this wrong)
     import re as _re
     if float(budget) >= 999999:
-        m = _re.search(r'(\d[\d,]*)\s*(?:rupees|rs|inr|usd|\$|euros?|dollars?)\b', state.get("user_request", ""), _re.IGNORECASE)
+        m = _re.search(r'(\d[\d,]*)\s*(?:lakh|cr|crore|rupees|rs|inr|usd|\$|euros?|dollars?)\b', state.get("user_request", ""), _re.IGNORECASE)
         if m:
-            budget = float(m.group(1).replace(",", ""))
+            val = float(m.group(1).replace(",", ""))
+            unit = m.group(0).lower()
+            if "lakh" in unit:
+                val *= 100000
+            elif "crore" in unit or "cr" in unit:
+                val *= 10000000
+            budget = val
             parsed["budget"] = budget
     
     n_travelers = int(parsed.get("num_travelers", 1))
