@@ -60,17 +60,9 @@ async def plan_trip_stream(request: TripRequest):
 
         travelers = request.adults + request.kids + request.infants
 
-        # Default agent providers: only apply when frontend sends None (not empty dict)
-        # Empty dict {} means the user wants all agents to use the main provider.
-        if request.agent_providers is None:
-            agent_providers = {
-                "supervisor": "gemini",
-                "validator": "gemini",
-                "itinerary": "gemini",
-                "critic": "gemini",
-            }
-        else:
-            agent_providers = request.agent_providers
+        # Agent providers: frontend controls which agents use which provider.
+        # When None (not sent), all agents use the main provider (default: groq).
+        agent_providers = request.agent_providers if request.agent_providers is not None else {}
 
         initial_state = {
             "user_request": request.user_request,
@@ -143,7 +135,7 @@ async def plan_trip_stream(request: TripRequest):
                 nonlocal graph_done
                 deadline = asyncio.get_event_loop().time() + 300
                 try:
-                    ait = trip_graph.astream_events(initial_state)
+                    ait = trip_graph.astream_events(initial_state, {"recursion_limit": 100})
                     while True:
                         remaining = deadline - asyncio.get_event_loop().time()
                         if remaining <= 0:
@@ -303,15 +295,7 @@ async def plan_trip(request: TripRequest) -> TripResponse:
 
     travelers = request.adults + request.kids + request.infants
 
-    if request.agent_providers is None:
-        agent_providers = {
-            "supervisor": "gemini",
-            "validator": "gemini",
-            "itinerary": "gemini",
-            "critic": "gemini",
-        }
-    else:
-        agent_providers = request.agent_providers
+    agent_providers = request.agent_providers if request.agent_providers is not None else {}
 
     initial_state = {
         "user_request": request.user_request,
@@ -333,7 +317,7 @@ async def plan_trip(request: TripRequest) -> TripResponse:
     if prev:
         initial_state["previous_context"] = prev
 
-    result = await trip_graph.ainvoke(initial_state)
+    result = await trip_graph.ainvoke(initial_state, {"recursion_limit": 100})
     duration_ms = (time.time() - start_time) * 1000
 
     if request.session_id:

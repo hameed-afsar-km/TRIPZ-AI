@@ -190,9 +190,10 @@ async def call_llm(
         
         if is_invalid_key or is_unavailable:
             if is_unavailable:
+                fallback_timeout = min(timeout, 45)
                 logger.warning(
-                    "Provider '%s' unavailable (503). Falling back to alternative provider.", 
-                    provider
+                    "Provider '%s' unavailable (503). Falling back to alternative provider (timeout=%ds).", 
+                    provider, fallback_timeout
                 )
                 if provider == "gemini":
                     fallback_key = os.getenv("GROQ_API_KEY")
@@ -201,7 +202,7 @@ async def call_llm(
                             role=role, prompt=prompt, system=system,
                             expect_json=expect_json, temperature=temperature,
                             provider="groq", api_key=None,
-                            use_cache=use_cache, timeout=timeout,
+                            use_cache=use_cache, timeout=fallback_timeout,
                         )
                 elif provider == "groq":
                     fallback_key = os.getenv("GEMINI_API_KEY")
@@ -210,7 +211,7 @@ async def call_llm(
                             role=role, prompt=prompt, system=system,
                             expect_json=expect_json, temperature=temperature,
                             provider="gemini", api_key=None,
-                            use_cache=use_cache, timeout=timeout,
+                            use_cache=use_cache, timeout=fallback_timeout,
                         )
             else:
                 env_key = os.getenv(f"{provider.upper()}_API_KEY", "")
@@ -218,38 +219,41 @@ async def call_llm(
 
                 if api_key and _is_valid_key(api_key) and not is_same_key:
                     # Custom user key failed and server env key is different — retry with env key.
+                    # Use a shorter timeout (30s max) so Gemini's slowness doesn't cascade.
+                    retry_timeout = min(timeout, 30)
                     logger.warning(
-                        "Custom API key for provider '%s' failed validation. Retrying with server environment key.",
-                        provider
+                        "Custom API key for provider '%s' failed validation. Retrying with server environment key (timeout=%ds).",
+                        provider, retry_timeout
                     )
                     return await call_llm(
                         role=role, prompt=prompt, system=system,
                         expect_json=expect_json, temperature=temperature,
                         provider=provider, api_key=None,
-                        use_cache=use_cache, timeout=timeout,
+                        use_cache=use_cache, timeout=retry_timeout,
                     )
 
                 # Server environment key failed (or custom key is same as env key).
-                # Fall back to a different provider.
+                # Fall back to a different provider with a shorter timeout.
+                fallback_timeout = min(timeout, 45)
                 if provider == "gemini":
                     fallback_key = os.getenv("GROQ_API_KEY")
                     if fallback_key:
-                        logger.warning("Gemini API key failed validation. Falling back to Groq.")
+                        logger.warning("Gemini API key failed validation. Falling back to Groq (timeout=%ds).", fallback_timeout)
                         return await call_llm(
                             role=role, prompt=prompt, system=system,
                             expect_json=expect_json, temperature=temperature,
                             provider="groq", api_key=None,
-                            use_cache=use_cache, timeout=timeout,
+                            use_cache=use_cache, timeout=fallback_timeout,
                         )
                 elif provider == "groq":
                     fallback_key = os.getenv("GEMINI_API_KEY")
                     if fallback_key:
-                        logger.warning("Groq API key failed validation. Falling back to Gemini.")
+                        logger.warning("Groq API key failed validation. Falling back to Gemini (timeout=%ds).", fallback_timeout)
                         return await call_llm(
                             role=role, prompt=prompt, system=system,
                             expect_json=expect_json, temperature=temperature,
                             provider="gemini", api_key=None,
-                            use_cache=use_cache, timeout=timeout,
+                            use_cache=use_cache, timeout=fallback_timeout,
                         )
 
         err_type = _classify_llm_error(e)

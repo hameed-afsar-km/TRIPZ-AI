@@ -320,29 +320,33 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         )
     except asyncio.TimeoutError as e:
         logger.error("Itinerary LLM timed out: %s", e)
-        return {**state, "itinerary": {"error": str(e), "error_type": "timeout"},
-                "warnings": [str(e)], "execution_trace": ["itinerary_agent:timeout"]}
+        return {
+            "itinerary": {"error": str(e), "error_type": "timeout"},
+            "warnings": [str(e)],
+            "execution_trace": ["itinerary_agent:timeout"],
+        }
     except Exception as e:
         msg = str(e)
         logger.error("Itinerary LLM failed: %s", msg)
-        # Clean up the error message for display
         if msg.startswith("[") and "]" in msg:
             err_type = msg[1:msg.index("]")]
             msg = msg[msg.index("]") + 1:].strip()
         else:
             err_type = "api_error"
-        return {**state, "itinerary": {"error": msg, "error_type": err_type},
-                "warnings": [msg], "execution_trace": ["itinerary_agent:failed"]}
+        return {
+            "itinerary": {"error": msg, "error_type": err_type},
+            "warnings": [msg],
+            "execution_trace": ["itinerary_agent:failed"],
+        }
 
-    warnings = state.get("warnings", [])
+    new_warnings = []
     if total_budget < 999999:
         budget_warning = _check_budget(markdown, total_budget, currency)
         if budget_warning:
-            warnings.append(budget_warning)
+            new_warnings.append(budget_warning)
 
     return {
-        **state,
         "itinerary": {"markdown": markdown},
-        "warnings": warnings,
+        "warnings": new_warnings,
         "execution_trace": ["itinerary_agent"],
     }

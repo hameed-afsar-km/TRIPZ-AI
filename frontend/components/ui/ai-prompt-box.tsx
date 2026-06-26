@@ -486,7 +486,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   }, []);
 
   const agentProviders: Record<string, string> = freeTier
-    ? { supervisor: "gemini", itinerary: "gemini" }
+    ? { supervisor: "gemini", validator: "gemini", critic: "gemini" }
     : {};
 
   const saveSettings = () => {
