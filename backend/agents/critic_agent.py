@@ -8,7 +8,7 @@ from services.wikipedia_service import validate_venues
 
 
 CRITIC_SYSTEM = """You are a strict travel itinerary reviewer.
-Check for: vague descriptions, repeated text, wrong day count, wrong currency, budget issues, lack of variety.
+Check for: vague descriptions, repeated text, wrong day count, wrong currency, budget issues, lack of variety, budget arithmetic errors.
 Output ONLY valid JSON."""
 
 
@@ -39,6 +39,8 @@ Check for these issues:
 5. Budget mismatch — if total cost far exceeds budget = FAIL
 6. Missing variety — if same theme repeats every day = FAIL
 7. Fake venues — cross-reference against the known real venues list above. Flag any venue that appears to be invented, misnamed, or is not a real tourist attraction for {destination}. Pay special attention to venues listed as "NOT FOUND", "SUSPICIOUS", "UNVERIFIED", or in the non-linked names.
+8. **Budget arithmetic** — Extract the Accommodation, Food, Activities, Transport, and Grand Total from the Final Cost Summary. Verify that Accommodation + Food + Activities + Transport = Grand Total. If the sum does not match, flag as FAIL and include the correct total in the feedback.
+9. **Duplicate venues** — Check if any venue name appears on multiple different days. If so, flag as FAIL.
 
 Return JSON:
 {{"pass":true,"issues":[],"feedback":"","needs_replanning":false}}
@@ -49,7 +51,7 @@ Return JSON:
 - needs_replanning: true if issues are severe enough to regenerate"""
 
 
-_VENUE_PATTERN = re.compile(r'\[([^\]]+)\]\(https?://(?:www\.)?google\.com/maps\?q=([^)]+)\)')
+_VENUE_PATTERN = re.compile(r'\[([^\]]+)\]\(https?://(?:www\.)?google\.com/maps/(?:search/?\?api=1&query=[^)]+|\\?q=[^)]+)\)')
 
 _VAGUE_WORDS = {"relax", "explore", "visit", "enjoy", "walk", "stroll", "shop", "dinner", "lunch", "breakfast", "go", "head", "drive", "take", "try", "see", "discover"}
 

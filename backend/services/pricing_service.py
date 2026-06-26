@@ -15,13 +15,22 @@ _XOTELO_CACHE: dict[str, float] = {}
 
 
 def _names_match(query: str, candidate: str) -> bool:
-    """Check if two hotel names refer to the same place using word overlap."""
-    q_words = {w for w in query.lower().split() if len(w) > 2}
-    c_words = {w for w in candidate.lower().split() if len(w) > 2}
+    """Check if two hotel names refer to the same place using word overlap.
+
+    Requires at least 70% word overlap and at least one distinctive word (≥4 chars) to match.
+    """
+    q_lower = query.lower().strip()
+    c_lower = candidate.lower().strip()
+    q_words = {w for w in q_lower.split() if len(w) > 2}
+    c_words = {w for w in c_lower.split() if len(w) > 2}
     if not q_words or not c_words:
-        return query.lower() in candidate.lower() or candidate.lower() in query.lower()
+        return q_lower in c_lower or c_lower in q_lower
+    q_distinctive = {w for w in q_words if len(w) >= 4}
+    c_distinctive = {w for w in c_words if len(w) >= 4}
     common = q_words & c_words
-    return len(common) >= max(1, len(q_words) // 2)
+    common_distinctive = q_distinctive & c_distinctive
+    overlap_ratio = len(common) / max(len(q_words), len(c_words))
+    return overlap_ratio >= 0.7 and len(common_distinctive) >= 1
 
 
 def _average_price(results: List[Dict[str, Any]]) -> Optional[float]:

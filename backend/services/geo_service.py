@@ -7,10 +7,13 @@ Geo Service — live location data from OpenStreetMap (free, no API key).
 
 import asyncio
 import json
+import logging
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 import httpx
+
+logger = logging.getLogger(__name__)
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -243,7 +246,51 @@ async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
                                f"Visit {name} in {destination}")),
             "lat": el.get("lat") or el.get("center", {}).get("lat"),
             "lon": el.get("lon") or el.get("center", {}).get("lon"),
+            "tags": {
+                "cuisine": tags.get("cuisine", ""),
+                "opening_hours": tags.get("opening_hours", ""),
+                "website": tags.get("website", ""),
+                "phone": tags.get("phone", ""),
+            },
         })
+
+    # Fetch restaurants separately to complement attractions
+    try:
+        restaurant_q = f"""
+        [out:json][timeout:15];
+        (
+          node["amenity"~"restaurant|cafe"]({bbox_str});
+          way["amenity"~"restaurant|cafe"]({bbox_str});
+        );
+        out center 15;
+        """
+        rest_elements = await _overpass_query(restaurant_q, 15)
+        for el in rest_elements:
+            tags = el.get("tags", {})
+            name = _best_name(tags)
+            if not name or name.lower() in seen_names:
+                continue
+            if not _is_in_correct_city(tags, destination, name):
+                continue
+            seen_names.add(name.lower())
+            activities.append({
+                "name": name,
+                "category": "food",
+                "cost": None,
+                "indoor": True,
+                "description": tags.get("description", tags.get("note",
+                                   f"Dine at {name} in {destination}")),
+                "lat": el.get("lat") or el.get("center", {}).get("lat"),
+                "lon": el.get("lon") or el.get("center", {}).get("lon"),
+                "tags": {
+                    "cuisine": tags.get("cuisine", ""),
+                    "opening_hours": tags.get("opening_hours", ""),
+                    "website": tags.get("website", ""),
+                    "phone": tags.get("phone", ""),
+                },
+            })
+    except Exception:
+        logger.debug("Restaurant query failed for %s", destination, exc_info=True)
 
     async with _LOCK:
         _cache[key] = {"data": activities, "_ts": time.time()}

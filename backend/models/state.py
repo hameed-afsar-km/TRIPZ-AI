@@ -50,5 +50,6 @@ class TripState(TypedDict, total=False):
     error: Annotated[Optional[str], _last_writer]
     warnings: Annotated[List[str], operator.add]
     execution_trace: Annotated[List[str], operator.add]
+    visited_places: Annotated[List[str], operator.add]
     confidence_score: Annotated[float, _last_writer]
 
