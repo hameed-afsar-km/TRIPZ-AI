@@ -1,5 +1,10 @@
-﻿import asyncio, time, sys
+import asyncio, time, sys, logging
 sys.path.insert(0, r'D:\AI Agents\langgraph\TRIPZ-AI\backend')
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+)
 
 async def test():
     print("Importing graph...")
@@ -9,7 +14,7 @@ async def test():
     start = time.time()
     state = await trip_graph.ainvoke({
         'user_request': '3 days in Tokyo with 1000 budget',
-        'provider': 'ollama',
+        'provider': 'groq',
         'api_key': None,
         'replan_count': 0,
         'warnings': [],

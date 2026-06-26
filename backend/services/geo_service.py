@@ -179,16 +179,16 @@ async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
         return []
 
     bbox_str = _build_bbox_str(geo["bbox"])
-    # Single combined query — much faster than 3 parallel queries
+    # Query only tourist-relevant categories — no generic parks/gardens/leisure
     q = f"""
     [out:json][timeout:20];
     (
-      node["tourism"~"attraction|museum|gallery|viewpoint|theme_park|nightclub"]({bbox_str});
-      way["tourism"~"attraction|museum|gallery|viewpoint|theme_park|nightclub"]({bbox_str});
-      node["historic"~"monument|castle|ruins|archaeological_site"]({bbox_str});
-      way["historic"~"monument|castle|ruins|archaeological_site"]({bbox_str});
-      node["leisure"~"park|garden|water_park"]({bbox_str});
-      way["leisure"~"park|garden|water_park"]({bbox_str});
+      node["tourism"~"attraction|museum|gallery|viewpoint|theme_park|zoo|aquarium"]({bbox_str});
+      way["tourism"~"attraction|museum|gallery|viewpoint|theme_park|zoo|aquarium"]({bbox_str});
+      node["historic"~"monument|castle|memorial|archaeological_site|fort|ruins"]({bbox_str});
+      way["historic"~"monument|castle|memorial|archaeological_site|fort|ruins"]({bbox_str});
+      node["leisure"~"water_park|amusement_arcade|miniature_golf"]({bbox_str});
+      way["leisure"~"water_park|amusement_arcade|miniature_golf"]({bbox_str});
     );
     out center 30;
     """
@@ -207,10 +207,13 @@ async def fetch_activities(destination: str) -> List[Dict[str, Any]]:
     cat_map = {
         "museum": "culture", "gallery": "art", "attraction": "sightseeing",
         "viewpoint": "nature", "theme_park": "adventure",
-        "monument": "history", "castle": "history", "ruins": "history",
+        "zoo": "nature", "aquarium": "nature",
+        "monument": "history", "castle": "history", "fort": "history",
+        "memorial": "history", "ruins": "history",
         "archaeological_site": "history",
-        "park": "nature", "garden": "relaxation", "water_park": "adventure",
-        "nightclub": "nightlife",
+        "water_park": "adventure",
+        "amusement_arcade": "entertainment",
+        "miniature_golf": "entertainment",
     }
 
     activities = []

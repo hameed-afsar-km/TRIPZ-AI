@@ -4,6 +4,7 @@ TRIPZ-AI Core Orchestration Graph
 LangGraph StateGraph with:
   - Conditional routing
   - Parallel branch execution
+  - Tourist-venue validation filter
   - Critic → Replan feedback loop (max 2 replans)
   - Explicit START/END nodes
   - Full state propagation
@@ -15,11 +16,12 @@ Graph Flow:
                 ├─► routing_agent  [AI #2: classify workflow]
                 ├─► budget_agent   [deterministic math]
                 ├─► transit_agent  [tool calls]
-                └─► curator_agent  [tool calls]
-          └─► itinerary_agent      [AI #3: synthesize plan]
-                └─► critic_agent   [AI #4: validate quality]
+                └─► curator_agent  [tool calls → OSM]
+          └─► validator_agent      [AI #3: filter non-tourist garbage]
+          └─► itinerary_agent      [AI #4: synthesize plan]
+                └─► critic_agent   [AI #5: validate quality]
                       └─► (conditional)
-                            ├─► needs_replanning=True → itinerary_agent [AI #5]
+                            ├─► needs_replanning=True → itinerary_agent [AI #6]
                             └─► needs_replanning=False → END
 """
 
@@ -34,6 +36,7 @@ from agents.routing_agent import routing_agent
 from agents.budget_agent import budget_agent
 from agents.transit_agent import transit_agent
 from agents.curator_agent import curator_agent
+from agents.validator_agent import validator_agent
 from agents.itinerary_agent import itinerary_agent
 from agents.critic_agent import critic_agent
 
@@ -78,6 +81,7 @@ def build_graph() -> StateGraph:
     graph.add_node("budget_agent",        budget_agent)
     graph.add_node("transit_agent",       transit_agent)
     graph.add_node("curator_agent",       curator_agent)
+    graph.add_node("validator_agent",     validator_agent)
     graph.add_node("itinerary_agent",     itinerary_agent)
     graph.add_node("critic_agent",        critic_agent)
     graph.add_node("clarify_node",        clarify_node)
@@ -98,10 +102,11 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # Parallel agents → itinerary_agent
+    # Parallel agents → validator → itinerary (curator output gets filtered first)
+    graph.add_edge("curator_agent",       "validator_agent")
+    graph.add_edge("validator_agent",     "itinerary_agent")
     graph.add_edge("budget_agent",        "itinerary_agent")
     graph.add_edge("transit_agent",       "itinerary_agent")
-    graph.add_edge("curator_agent",       "itinerary_agent")
     graph.add_edge("routing_agent",       "itinerary_agent")
 
     # itinerary → critic → (conditional) itinerary or END

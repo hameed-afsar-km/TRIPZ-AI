@@ -9,6 +9,17 @@ logger = logging.getLogger("tripz.agents")
 WIKI_API = "https://en.wikipedia.org/w/api.php"
 _USER_AGENT = "TRIPZ-AI/1.0 (travel planner; +https://github.com/tripz-ai)"
 
+_shared_client: Optional[httpx.AsyncClient] = None
+_venue_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+_SEMAPHORE_LIMIT = 5
+
+
+async def _get_client() -> httpx.AsyncClient:
+    global _shared_client
+    if _shared_client is None:
+        _shared_client = httpx.AsyncClient(timeout=3, headers={"User-Agent": _USER_AGENT})
+    return _shared_client
+
 
 async def _query_page(title: str) -> Optional[Dict[str, Any]]:
     """Fetch page data via action=query with extracts and coordinates."""
@@ -23,19 +34,19 @@ async def _query_page(title: str) -> Optional[Dict[str, Any]]:
         "redirects": 1,
     }
     try:
-        async with httpx.AsyncClient(timeout=4) as client:
-            resp = await client.get(WIKI_API, params=params, headers={"User-Agent": _USER_AGENT})
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            pages = data.get("query", {}).get("pages", {})
-            for pid, page in pages.items():
-                if pid == "-1":
-                    continue
-                if "pageprops" in page and "disambiguation" in page["pageprops"]:
-                    return None
-                return page
+        client = await _get_client()
+        resp = await client.get(WIKI_API, params=params)
+        if resp.status_code != 200:
             return None
+        data = resp.json()
+        pages = data.get("query", {}).get("pages", {})
+        for pid, page in pages.items():
+            if pid == "-1":
+                continue
+            if "pageprops" in page and "disambiguation" in page["pageprops"]:
+                return None
+            return page
+        return None
     except Exception:
         return None
 
@@ -50,14 +61,14 @@ async def _search_wikipedia(query: str) -> Optional[str]:
         "srlimit": 3,
     }
     try:
-        async with httpx.AsyncClient(timeout=4) as client:
-            resp = await client.get(WIKI_API, params=params, headers={"User-Agent": _USER_AGENT})
-            if resp.status_code == 200:
-                data = resp.json()
-                pages = data.get("query", {}).get("search", [])
-                if pages:
-                    return pages[0].get("title")
-            return None
+        client = await _get_client()
+        resp = await client.get(WIKI_API, params=params)
+        if resp.status_code == 200:
+            data = resp.json()
+            pages = data.get("query", {}).get("search", [])
+            if pages:
+                return pages[0].get("title")
+        return None
     except Exception:
         return None
 
@@ -73,72 +84,83 @@ def _title_matches(original: str, wiki_title: str) -> bool:
     wiki_words = {w.lower() for w in wiki_title.split() if w.lower() not in _STOP_WORDS}
     if not orig_words:
         return False
-    return len(orig_words & wiki_words) >= 1
+    overlap = len(orig_words & wiki_words)
+    if len(orig_words) >= 3:
+        return overlap >= 2
+    return overlap >= 1
 
 
-async def validate_venue(name: str, city: str) -> Dict[str, Any]:
+_venue_semaphore = asyncio.Semaphore(_SEMAPHORE_LIMIT)
+
+
+async def _validate_single_venue(name: str, city: str) -> Dict[str, Any]:
     """Check if a venue name matches a real place on Wikipedia.
 
-    Returns:
-        {
-            "exists": bool,
-            "original_name": str,
-            "correct_name": str | None,
-            "coordinates": [lat, lon] | None,
-            "description": str,
-            "city_hint": str | None,
-        }
+    Respects in-memory cache and concurrency semaphore.
     """
-    result: Dict[str, Any] = {
-        "exists": False,
-        "original_name": name,
-        "correct_name": None,
-        "coordinates": None,
-        "description": "",
-        "city_hint": None,
-    }
+    cache_key = f"{name.lower()}|{city.lower()}"
+    if cache_key in _venue_cache:
+        cached = _venue_cache[cache_key]
+        if cached is None:
+            return {"exists": False, "original_name": name, "correct_name": None,
+                    "coordinates": None, "description": "", "city_hint": None}
+        return dict(cached)
 
-    page = await _query_page(name)
-    if page is None:
-        searched = await _search_wikipedia(f"{name} {city}")
-        if searched:
-            page = await _query_page(searched)
+    async with _venue_semaphore:
+        result: Dict[str, Any] = {
+            "exists": False,
+            "original_name": name,
+            "correct_name": None,
+            "coordinates": None,
+            "description": "",
+            "city_hint": None,
+        }
+
+        page = await _query_page(name)
         if page is None:
-            searched = await _search_wikipedia(name)
+            searched = await _search_wikipedia(f"{name} {city}")
             if searched:
                 page = await _query_page(searched)
+            if page is None:
+                searched = await _search_wikipedia(name)
+                if searched:
+                    page = await _query_page(searched)
 
-    if page is None:
+        if page is None:
+            _venue_cache[cache_key] = None
+            return result
+
+        wiki_title = page.get("title", "")
+
+        if not _title_matches(name, wiki_title):
+            _venue_cache[cache_key] = None
+            return result
+
+        result["exists"] = True
+        result["description"] = (page.get("extract", "") or "")[:300]
+        result["correct_name"] = wiki_title
+
+        coords = page.get("coordinates")
+        if coords:
+            result["coordinates"] = [coords[0].get("lat"), coords[0].get("lon")]
+
+        extract = ((page.get("extract", "") or "")).lower()
+        city_lower = city.lower()
+        for part in city_lower.split(","):
+            part = part.strip()
+            if part and part in extract:
+                result["city_hint"] = city
+                break
+
+        _venue_cache[cache_key] = result
         return result
-
-    wiki_title = page.get("title", "")
-
-    if not _title_matches(name, wiki_title):
-        return result
-
-    result["exists"] = True
-    result["description"] = (page.get("extract", "") or "")[:300]
-    result["correct_name"] = wiki_title
-
-    coords = page.get("coordinates")
-    if coords:
-        result["coordinates"] = [coords[0].get("lat"), coords[0].get("lon")]
-
-    extract = ((page.get("extract", "") or "")).lower()
-    city_lower = city.lower()
-    for part in city_lower.split(","):
-        part = part.strip()
-        if part and part in extract:
-            result["city_hint"] = city
-            break
-
-    return result
 
 
 async def validate_venues(names: List[str], city: str, max_venues: int = 10) -> List[Dict[str, Any]]:
-    """Validate multiple venue names against Wikipedia in parallel (batched).
+    """Validate multiple venue names against Wikipedia in parallel.
 
     Only validates the first `max_venues` unique names to keep latency reasonable.
+    Uses a semaphore to limit concurrent Wikipedia API calls and caches results.
     """
     seen = set()
     unique = []
@@ -148,17 +170,20 @@ async def validate_venues(names: List[str], city: str, max_venues: int = 10) -> 
             unique.append(n)
 
     unique = unique[:max_venues]
+    if not unique:
+        return []
 
-    results = []
-    for i in range(0, len(unique), 10):
-        batch = unique[i:i + 10]
-        tasks = [validate_venue(name, city) for name in batch]
-        batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-        for r in batch_results:
-            if isinstance(r, dict):
-                r["_batch_size"] = len(names)
-                r["_validated_count"] = len(unique)
-                results.append(r)
-            else:
-                results.append({"exists": False, "original_name": "unknown", "error": str(r)})
-    return results
+    tasks = [validate_venue(name, city) for name in unique]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    final = []
+    for r in results:
+        if isinstance(r, dict):
+            r["_batch_size"] = len(names)
+            r["_validated_count"] = len(unique)
+            final.append(r)
+        else:
+            final.append({"exists": False, "original_name": "unknown", "error": str(r)})
+    return final
+
+
+validate_venue = _validate_single_venue

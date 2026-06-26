@@ -5,9 +5,12 @@ TRIPZ-AI Backend — FastAPI Application Entry Point
 import logging
 import os
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from project root (parent of backend/) or CWD
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv()  # fallback to CWD
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

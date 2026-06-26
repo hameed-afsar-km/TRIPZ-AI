@@ -60,12 +60,17 @@ async def plan_trip_stream(request: TripRequest):
 
         travelers = request.adults + request.kids + request.infants
 
-        # Default: supervisor, itinerary & critic use Gemini; routing, budget, etc. use Groq
-        agent_providers = request.agent_providers or {
-            "supervisor": "gemini",
-            "itinerary": "gemini",
-            "critic": "gemini",
-        }
+        # Default agent providers: only apply when frontend sends None (not empty dict)
+        # Empty dict {} means the user wants all agents to use the main provider.
+        if request.agent_providers is None:
+            agent_providers = {
+                "supervisor": "gemini",
+                "validator": "gemini",
+                "itinerary": "gemini",
+                "critic": "gemini",
+            }
+        else:
+            agent_providers = request.agent_providers
 
         initial_state = {
             "user_request": request.user_request,
@@ -298,11 +303,15 @@ async def plan_trip(request: TripRequest) -> TripResponse:
 
     travelers = request.adults + request.kids + request.infants
 
-    agent_providers = request.agent_providers or {
-        "supervisor": "gemini",
-        "itinerary": "gemini",
-        "critic": "gemini",
-    }
+    if request.agent_providers is None:
+        agent_providers = {
+            "supervisor": "gemini",
+            "validator": "gemini",
+            "itinerary": "gemini",
+            "critic": "gemini",
+        }
+    else:
+        agent_providers = request.agent_providers
 
     initial_state = {
         "user_request": request.user_request,
@@ -353,6 +362,7 @@ def _agent_label(name: str) -> str:
         "budget_agent":     "Calculating budget & hotel options...",
         "transit_agent":    "Checking weather & transport...",
         "curator_agent":    "Curating top activities & viewpoints...",
+        "validator_agent":  "Filtering non-tourist attractions...",
         "itinerary_agent":  "Crafting your day-by-day itinerary...",
         "critic_agent":     "Reviewing & validating your trip...",
         "clarify_node":     "Request needs clarification...",
@@ -368,6 +378,7 @@ AGENT_OUTPUT_KEYS = {
     "budget_agent":     ["hotels", "budget_breakdown"],
     "transit_agent":    ["weather", "transport"],
     "curator_agent":    ["activities"],
+    "validator_agent":  ["activities"],  # filtered list (pass-through)
     "itinerary_agent":  ["itinerary"],  # returns {"markdown": "..."}
     "critic_agent":     ["replan_instructions", "needs_replanning", "replan_count"],
 }
@@ -398,6 +409,10 @@ def _extract_preview(agent: str, output: dict) -> dict:
         return {
             "hotels_found": len(output.get("hotels", [])),
             "budget_ok": bool(output.get("budget_breakdown")),
+        }
+    if agent == "validator_agent":
+        return {
+            "activities_approved": len(output.get("activities", [])),
         }
     if agent == "itinerary_agent":
         itin = output.get("itinerary", {})

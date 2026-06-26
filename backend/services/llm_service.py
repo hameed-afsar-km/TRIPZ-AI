@@ -5,6 +5,8 @@ import asyncio
 import hashlib
 import contextvars
 import time
+import logging
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -15,6 +17,27 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
 
+logger = logging.getLogger("tripz.llm_service")
+
+# ── Ensure .env is loaded (belt-and-suspenders — main.py may not have run) ─
+_dotenv_loaded = False
+for _dotenv_candidate in [
+    Path(__file__).resolve().parent.parent.parent / ".env",  # project root
+    Path.cwd() / ".env",                                      # CWD
+]:
+    if _dotenv_candidate.exists():
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(_dotenv_candidate)
+            _dotenv_loaded = True
+            logger.info("Loaded env from %s", _dotenv_candidate)
+            break
+        except Exception:
+            pass
+
+if not _dotenv_loaded:
+    logger.warning("No .env file found — relying on OS environment variables")
+
 
 # ── Streaming callback via contextvar (avoids modifying LangGraph state) ─
 token_callback_var: contextvars.ContextVar = contextvars.ContextVar("token_callback", default=None)
@@ -23,6 +46,10 @@ token_callback_var: contextvars.ContextVar = contextvars.ContextVar("token_callb
 # ── Simple LRU response cache ─────────────────────────────────────────────
 _cache: Dict[str, Any] = {}
 _cache_max = 64
+
+
+def _is_valid_key(k: Optional[str]) -> bool:
+    return bool(k and k.strip() and k.strip().lower() not in ("undefined", "null", "none", ""))
 
 
 def resolve_provider(state: dict, agent_role: str) -> str:
@@ -56,11 +83,23 @@ def get_llm(provider: str, api_key: Optional[str], temperature: float = 0.3, exp
     provider = _aliases.get(_normalised, provider)
 
     if provider == "gemini":
-        key = api_key if api_key and api_key.strip() else os.getenv("GEMINI_API_KEY", "missing-key")
+        key = api_key if _is_valid_key(api_key) else os.getenv("GEMINI_API_KEY") or "missing-key"
     elif provider == "groq":
-        key = api_key if api_key and api_key.strip() else os.getenv("GROQ_API_KEY", "missing-key")
+        key = api_key if _is_valid_key(api_key) else os.getenv("GROQ_API_KEY") or "missing-key"
     else:
-        key = api_key if api_key and api_key.strip() else "missing-key"
+        key = api_key if _is_valid_key(api_key) else "missing-key"
+
+    # Graceful fallback: if key is missing, try the other well-known provider
+    if (not _is_valid_key(key) or key == "missing-key") and provider != "groq":
+        fallback_key = os.getenv("GROQ_API_KEY")
+        if fallback_key:
+            logger.warning("No valid API key for %s — falling back to Groq", provider)
+            return get_llm("groq", None, temperature, expect_json)
+    elif (not _is_valid_key(key) or key == "missing-key") and provider == "groq":
+        fallback_key = os.getenv("GEMINI_API_KEY")
+        if fallback_key:
+            logger.warning("No valid API key for Groq — falling back to Gemini")
+            return get_llm("gemini", None, temperature, expect_json)
 
     if provider == "openai":
         return ChatOpenAI(model="gpt-4o-mini", temperature=temperature, api_key=key)
@@ -138,6 +177,81 @@ async def call_llm(
     except asyncio.TimeoutError:
         raise TimeoutError(f"LLM call timed out after {timeout}s ({role})")
     except Exception as e:
+        msg = str(e).lower()
+        is_invalid_key = ("api key not valid" in msg or 
+                          "api_key_invalid" in msg or 
+                          "invalid api key" in msg or 
+                          "api key is invalid" in msg)
+        is_unavailable = ("503" in msg or 
+                          "service unavailable" in msg or 
+                          "high demand" in msg or 
+                          "temporarily" in msg or 
+                          "unavailable" in msg)
+        
+        if is_invalid_key or is_unavailable:
+            if is_unavailable:
+                logger.warning(
+                    "Provider '%s' unavailable (503). Falling back to alternative provider.", 
+                    provider
+                )
+                if provider == "gemini":
+                    fallback_key = os.getenv("GROQ_API_KEY")
+                    if fallback_key:
+                        return await call_llm(
+                            role=role, prompt=prompt, system=system,
+                            expect_json=expect_json, temperature=temperature,
+                            provider="groq", api_key=None,
+                            use_cache=use_cache, timeout=timeout,
+                        )
+                elif provider == "groq":
+                    fallback_key = os.getenv("GEMINI_API_KEY")
+                    if fallback_key:
+                        return await call_llm(
+                            role=role, prompt=prompt, system=system,
+                            expect_json=expect_json, temperature=temperature,
+                            provider="gemini", api_key=None,
+                            use_cache=use_cache, timeout=timeout,
+                        )
+            else:
+                env_key = os.getenv(f"{provider.upper()}_API_KEY", "")
+                is_same_key = bool(api_key and env_key and api_key.strip() == env_key.strip())
+
+                if api_key and _is_valid_key(api_key) and not is_same_key:
+                    # Custom user key failed and server env key is different — retry with env key.
+                    logger.warning(
+                        "Custom API key for provider '%s' failed validation. Retrying with server environment key.",
+                        provider
+                    )
+                    return await call_llm(
+                        role=role, prompt=prompt, system=system,
+                        expect_json=expect_json, temperature=temperature,
+                        provider=provider, api_key=None,
+                        use_cache=use_cache, timeout=timeout,
+                    )
+
+                # Server environment key failed (or custom key is same as env key).
+                # Fall back to a different provider.
+                if provider == "gemini":
+                    fallback_key = os.getenv("GROQ_API_KEY")
+                    if fallback_key:
+                        logger.warning("Gemini API key failed validation. Falling back to Groq.")
+                        return await call_llm(
+                            role=role, prompt=prompt, system=system,
+                            expect_json=expect_json, temperature=temperature,
+                            provider="groq", api_key=None,
+                            use_cache=use_cache, timeout=timeout,
+                        )
+                elif provider == "groq":
+                    fallback_key = os.getenv("GEMINI_API_KEY")
+                    if fallback_key:
+                        logger.warning("Groq API key failed validation. Falling back to Gemini.")
+                        return await call_llm(
+                            role=role, prompt=prompt, system=system,
+                            expect_json=expect_json, temperature=temperature,
+                            provider="gemini", api_key=None,
+                            use_cache=use_cache, timeout=timeout,
+                        )
+
         err_type = _classify_llm_error(e)
         raise RuntimeError(f"[{err_type}] LLM call failed ({role}): {e}")
 
