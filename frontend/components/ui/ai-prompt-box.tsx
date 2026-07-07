@@ -485,9 +485,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
     }
   }, []);
 
-  const agentProviders: Record<string, string> = freeTier
-    ? { supervisor: "gemini", validator: "gemini", critic: "gemini" }
-    : {};
+  const agentProviders: Record<string, string> = {};
 
   const saveSettings = () => {
     localStorage.setItem("tripz_provider", provider);
@@ -918,7 +916,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white">Free Tier</p>
-                  <p className="text-[11px] text-zinc-400">Groq + Gemini — no API keys needed</p>
+                  <p className="text-[11px] text-zinc-400">Groq (llama-3.3-70b) — no API key needed</p>
                 </div>
               </div>
               <button
@@ -940,10 +938,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
               <label className="text-sm font-medium text-gray-300">LLM Provider</label>
               <select
                 value={provider}
-                onChange={(e) => {
-                  setProvider(e.target.value);
-                  if (e.target.value !== "groq") setFreeTier(false);
-                }}
+                onChange={(e) => setProvider(e.target.value)}
                 className="w-full bg-[#09090b]/80 border border-white/10 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50"
               >
                 <option value="groq">Groq (llama-3.3-70b) — Fastest</option>
