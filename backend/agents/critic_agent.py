@@ -1,15 +1,125 @@
 import asyncio
 import json
+import logging
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from services.llm_service import call_llm_json, resolve_provider
 from services.wikipedia_service import validate_venues
+
+logger = logging.getLogger("tripz.agents")
 
 
 CRITIC_SYSTEM = """You are a strict travel itinerary reviewer.
 Check for: vague descriptions, repeated text, wrong day count, wrong currency, budget issues, lack of variety, budget arithmetic errors.
 Output ONLY valid JSON."""
+
+
+# ── Pre-LLM validation patterns ────────────────────────────────────────────────
+
+_FINAL_SUMMARY_PATTERN = re.compile(
+    r'\*\*Accommodation\*\*:.*?=\s*~\s*\w+\s*([\d,]+(?:\.\d{1,2})?)\s*\n'
+    r'.*?\*\*Food\s*\(total\)\*\*:\s*~\s*\w+\s*([\d,]+(?:\.\d{1,2})?)\s*\n'
+    r'.*?\*\*Activities\s*\(total\)\*\*:\s*~\s*\w+\s*([\d,]+(?:\.\d{1,2})?)\s*\n'
+    r'.*?\*\*Transport\s*\(total\)\*\*:\s*~\s*\w+\s*([\d,]+(?:\.\d{1,2})?)\s*\n'
+    r'.*?\*\*Grand Total\*\*:\s*~\s*\w+\s*([\d,]+(?:\.\d{1,2})?)',
+    re.IGNORECASE | re.DOTALL,
+)
+
+_PER_NIGHT_PATTERN = re.compile(
+    r'(?:×|@|per night|/night)[^0-9]*(\d[\d,]*\.?\d*)',
+    re.IGNORECASE,
+)
+
+_VENUE_DUPLICATE_PATTERN = re.compile(r'\[([^\]]+)\]\(https?://(?:www\.)?google\.com/maps/[^)]+\)')
+
+
+def _check_budget_arithmetic(markdown: str) -> List[str]:
+    """Verify Accommodation + Food + Activities + Transport = Grand Total."""
+    issues = []
+    match = _FINAL_SUMMARY_PATTERN.search(markdown)
+    if not match:
+        issues.append("Could not find Final Cost Summary section with all 5 fields (Accommodation, Food, Activities, Transport, Grand Total).")
+        return issues
+
+    try:
+        accommodation = float(match.group(1).replace(",", ""))
+        food = float(match.group(2).replace(",", ""))
+        activities = float(match.group(3).replace(",", ""))
+        transport = float(match.group(4).replace(",", ""))
+        grand_total = float(match.group(5).replace(",", ""))
+    except (ValueError, IndexError):
+        issues.append("Could not parse numbers in Final Cost Summary.")
+        return issues
+
+    computed = accommodation + food + activities + transport
+    if abs(computed - grand_total) > 1.0:
+        issues.append(
+            f"Budget arithmetic error: {accommodation} (Acc) + {food} (Food) + {activities} (Act) + {transport} (Trans) = {computed}, "
+            f"but Grand Total says {grand_total}. Difference: {abs(computed - grand_total):.0f}. Fix the numbers."
+        )
+    return issues
+
+
+def _check_accommodation_consistency(markdown: str) -> List[str]:
+    """Check that the same hotel has the same price per night throughout."""
+    issues = []
+    hotel_sections = re.findall(
+        r'(?:Hotel|Accommodation|Stay at|at the)\s*\**([A-Z][A-Za-z\s\'-]+?)\**\s*[—–-]\s*\w+\s*(\d[\d,]*\.?\d*)\s*(?:/night|per night)?',
+        markdown,
+        re.IGNORECASE,
+    )
+    if not hotel_sections:
+        return issues
+
+    prices: Dict[str, List[float]] = {}
+    for name, price_str in hotel_sections:
+        name_clean = name.strip().rstrip('*—–- ')
+        try:
+            price = float(price_str.replace(",", ""))
+        except ValueError:
+            continue
+        if name_clean not in prices:
+            prices[name_clean] = []
+        prices[name_clean].append(price)
+
+    for hotel, price_list in prices.items():
+        unique_prices = set(price_list)
+        if len(unique_prices) > 1:
+            issues.append(
+                f"Accommodation inconsistency: '{hotel}' shows different prices across days: {', '.join(f'{p:.0f}' for p in price_list)}. "
+                f"The same hotel must have the same price per night every day."
+            )
+
+    return issues
+
+
+def _check_duplicate_venues(markdown: str) -> List[str]:
+    """Detect venues that appear in multiple days."""
+    issues = []
+    venue_days: Dict[str, List[int]] = {}
+    current_day = 0
+
+    for line in markdown.split("\n"):
+        day_match = re.match(r'##\s+Day\s+(\d+)', line, re.IGNORECASE)
+        if day_match:
+            current_day = int(day_match.group(1))
+
+        for vm in _VENUE_DUPLICATE_PATTERN.finditer(line):
+            venue = vm.group(1).strip().lower()
+            if venue not in venue_days:
+                venue_days[venue] = []
+            venue_days[venue].append(current_day)
+
+    for venue, days in venue_days.items():
+        unique_days = set(days)
+        if len(unique_days) > 1:
+            issues.append(
+                f"Duplicate venue: '{venue.title()}' appears on days {', '.join(f'Day {d}' for d in sorted(unique_days))}. "
+                f"Every venue must appear exactly once."
+            )
+
+    return issues
 
 
 CRITIC_PROMPT_TEMPLATE = """Review this {num_days}-day itinerary for {destination}:
@@ -31,6 +141,9 @@ Venue validation results (from Wikipedia):
 Non-linked venue names found in day sections:
 {plain_venues}
 
+Pre-validation issues found (automated checks):
+{pre_checks}
+
 Check for these issues:
 1. Vague descriptions — any "Relax at the hotel", "Explore the city", "Visit local attractions", "Enjoy dinner" with no specific name = FAIL
 2. Repeated text — same morning/afternoon/evening appearing on multiple days = FAIL
@@ -41,6 +154,7 @@ Check for these issues:
 7. Fake venues — cross-reference against the known real venues list above. Flag any venue that appears to be invented, misnamed, or is not a real tourist attraction for {destination}. Pay special attention to venues listed as "NOT FOUND", "SUSPICIOUS", "UNVERIFIED", or in the non-linked names.
 8. **Budget arithmetic** — Extract the Accommodation, Food, Activities, Transport, and Grand Total from the Final Cost Summary. Verify that Accommodation + Food + Activities + Transport = Grand Total. If the sum does not match, flag as FAIL and include the correct total in the feedback.
 9. **Duplicate venues** — Check if any venue name appears on multiple different days. If so, flag as FAIL.
+10. **Accommodation consistency** — If the same hotel appears on multiple days, verify the price per night is identical. A different price for the same hotel is a FAIL.
 
 Return JSON:
 {{"pass":true,"issues":[],"feedback":"","needs_replanning":false}}
@@ -183,6 +297,13 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     if len(itinerary_str) > 4000:
         itinerary_str = itinerary_str[:4000] + "\n... [truncated]"
 
+    # Run pre-LLM validation checks
+    pre_check_issues = []
+    pre_check_issues.extend(_check_budget_arithmetic(markdown))
+    pre_check_issues.extend(_check_accommodation_consistency(markdown))
+    pre_check_issues.extend(_check_duplicate_venues(markdown))
+    pre_checks_str = "\n".join(f"- {issue}" for issue in pre_check_issues) if pre_check_issues else "None found."
+
     prompt = CRITIC_PROMPT_TEMPLATE.format(
         num_days=num_days,
         destination=destination,
@@ -194,6 +315,7 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         venue_issues=venue_issues_str,
         cross_ref=cross_ref_str,
         plain_venues=plain_venues_str,
+        pre_checks=pre_checks_str,
     )
 
     result = await call_llm_json(
@@ -217,10 +339,23 @@ async def critic_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     needs_replan = result.get("needs_replanning", False)
     feedback = result.get("feedback", "")
+    llm_issues = result.get("issues", [])
+
+    # Merge pre-LLM issues with LLM issues
+    all_issues = pre_check_issues + llm_issues
+    if pre_check_issues and not needs_replan:
+        needs_replan = True
+        pre_feedback = "Automated checks found issues:\n" + "\n".join(f"- {i}" for i in pre_check_issues)
+        if feedback:
+            feedback = pre_feedback + "\n\n" + feedback
+        else:
+            feedback = pre_feedback
+
     return {
         "replan_instructions": feedback,
         "needs_replanning": needs_replan,
         "replan_count": replan_count + 1,
         "execution_trace": ["critic_agent"],
         "critic_prompt": prompt,
+        "critic_issues": all_issues,
     }

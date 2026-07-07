@@ -53,6 +53,7 @@ const AGENT_MAP: Record<string, { name: "Planner" | "Budget" | "Transit" | "Cura
   "budget_agent":     { name: "Budget", step: 1 },
   "transit_agent":    { name: "Transit", step: 2 },
   "curator_agent":    { name: "Curator", step: 3 },
+  "validator_agent":  { name: "Curator", step: 3 },
   "itinerary_agent":  { name: "Synthesis", step: 4 },
   "critic_agent":     { name: "Synthesis", step: 4 },
   "clarify_node":     { name: "Curator", step: 3 },
@@ -104,6 +105,13 @@ const AGENT_STATUS_MESSAGES: Record<string, string[]> = {
     "Finding top attractions & landmarks...",
     "Selecting must-visit spots for you...",
     "Orchestrating the perfect sightseeing plan...",
+  ],
+  validator_agent: [
+    "Filtering non-tourist attractions from your list...",
+    "Validating activity quality & relevance...",
+    "Checking for tourist-friendly venues...",
+    "Removing low-quality suggestions...",
+    "Ensuring only the best activities remain...",
   ],
   itinerary_agent: [
     "Crafting your perfect day-by-day plan...",
@@ -432,6 +440,67 @@ function ItineraryBoard({ itinerary, warnings, duration_ms }: ItineraryBoardProp
   );
 }
 
+function BudgetIndicator({ data }: { data: any }) {
+  const budget = data.budget || 0;
+  const currency = data.currency || "USD";
+  const totalCost = budget; // fallback
+
+  const [extractedCost, setExtractedCost] = useState<number | null>(null);
+  const [budgetPct, setBudgetPct] = useState(0);
+
+  useEffect(() => {
+    if (!data.itinerary?.markdown) return;
+    const md = data.itinerary.markdown;
+    // Try to extract Grand Total from markdown
+    const gtMatch = md.match(/\*\*Grand Total\*\*:\s*~\w+\s*([\d,]+(?:\.\d{1,2})?)/i);
+    if (gtMatch) {
+      const val = parseFloat(gtMatch[1].replace(/,/g, ""));
+      setExtractedCost(val);
+      if (budget > 0) setBudgetPct(Math.min(100, (val / budget) * 100));
+    }
+  }, [data, budget]);
+
+  if (budget <= 0) return null;
+
+  const spent = extractedCost ?? 0;
+  const remaining = Math.max(0, budget - spent);
+  const pct = Math.min(100, (spent / budget) * 100);
+
+  const pctColor = pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-emerald-500";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col gap-2 w-full max-w-5xl mx-auto mb-4 px-1"
+    >
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-zinc-400">
+          Budget <span className="text-white font-semibold">{formatCurrency(budget, currency)}</span>
+        </span>
+        <span className="text-zinc-500">
+          Spent <span className="text-orange-400 font-semibold">{formatCurrency(spent, currency)}</span>
+        </span>
+        <span className="text-zinc-500">
+          Remaining <span className={remaining > 0 ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>{formatCurrency(remaining, currency)}</span>
+        </span>
+      </div>
+      <div className="w-full h-1.5 bg-zinc-800/60 rounded-full overflow-hidden">
+        <motion.div
+          initial={{ width: "0%" }}
+          animate={{ width: `${Math.min(100, pct)}%` }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          className={`h-full rounded-full ${pctColor}`}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-zinc-600">
+        <span>{pct.toFixed(0)}% used</span>
+        <span>{data.duration_days || "?"} day{(data.duration_days || 0) !== 1 ? "s" : ""}</span>
+      </div>
+    </motion.div>
+  );
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -535,7 +604,7 @@ export default function Home() {
     mouseY.set(y);
   };
 
-  const runAgentSimulation = async (userInput: string, provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
+  const runAgentSimulation = async (userInput: string, provider: string = "groq", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -725,7 +794,7 @@ export default function Home() {
             timestamp: new Date().toLocaleTimeString(),
             isError: true,
           }]);
-          const providerName = provider === "ollama" ? "Ollama (qwen2.5:1.5b)" : provider;
+          const providerName = provider === "groq" ? "Groq (llama-3.3-70b)" : provider;
           setValidationError(`The request took too long with ${providerName}. Check that your provider is running and the API key is correct, or try a different provider in Settings.`);
           setIsProcessing(false);
           setSimulationStage("done");
@@ -752,7 +821,7 @@ export default function Home() {
     }
   };
 
-  const handleSend = (msg: string, files?: File[], provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
+  const handleSend = (msg: string, files?: File[], provider: string = "groq", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
     if (!msg || msg.trim() === "") return;
     if (!isTripRelated(msg)) {
       setValidationError("Please type a request related to trip planning (e.g., '3 days in Tokyo', 'Paris budget route', or 'explore Rome').");
@@ -1114,28 +1183,31 @@ export default function Home() {
                       className="w-full flex-shrink-0"
                     >
                       {itineraryResult.itinerary?.markdown ? (
-                        <div className="flex gap-4 w-full max-w-5xl mx-auto">
-                          <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-600/20 mt-1">
-                            <Bot className="w-4 h-4 text-white" />
-                          </div>
-                          <div className="flex-1 bg-zinc-900/60 p-6 rounded-3xl border border-zinc-800/60 backdrop-blur-md text-sm text-zinc-300">
-                            <div className="prose prose-invert prose-sm max-w-none
-                              prose-headings:text-orange-400 prose-headings:font-bold
-                              prose-h1:text-2xl prose-h1:mb-4 prose-h1:mt-2
-                              prose-h2:text-xl prose-h2:mb-3 prose-h2:mt-4
-                              prose-h3:text-lg prose-h3:mb-2 prose-h3:mt-3
-                              prose-strong:text-orange-300 prose-strong:font-semibold
-                              prose-ul:list-disc prose-ul:pl-5 prose-ul:space-y-1
-                              prose-li:marker:text-orange-500
-                              prose-p:leading-relaxed prose-p:mb-2
-                              prose-hr:border-zinc-700 prose-hr:my-4
-                              prose-code:text-orange-200 prose-code:bg-zinc-800 prose-code:px-1 prose-code:rounded
-                              prose-pre:bg-zinc-800 prose-pre:border prose-pre:border-zinc-700">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {itineraryResult.itinerary.markdown}
-                              </ReactMarkdown>
+                        <div className="flex flex-col gap-4 w-full max-w-5xl mx-auto">
+                          <BudgetIndicator data={itineraryResult} />
+                          <div className="flex gap-4">
+                            <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-600/20 mt-1">
+                              <Bot className="w-4 h-4 text-white" />
                             </div>
-                            <CopyButton text={itineraryResult.itinerary.markdown} />
+                            <div className="flex-1 bg-zinc-900/60 p-6 rounded-3xl border border-zinc-800/60 backdrop-blur-md text-sm text-zinc-300">
+                              <div className="prose prose-invert prose-sm max-w-none
+                                prose-headings:text-orange-400 prose-headings:font-bold
+                                prose-h1:text-2xl prose-h1:mb-4 prose-h1:mt-2
+                                prose-h2:text-xl prose-h2:mb-3 prose-h2:mt-4
+                                prose-h3:text-lg prose-h3:mb-2 prose-h3:mt-3
+                                prose-strong:text-orange-300 prose-strong:font-semibold
+                                prose-ul:list-disc prose-ul:pl-5 prose-ul:space-y-1
+                                prose-li:marker:text-orange-500
+                                prose-p:leading-relaxed prose-p:mb-2
+                                prose-hr:border-zinc-700 prose-hr:my-4
+                                prose-code:text-orange-200 prose-code:bg-zinc-800 prose-code:px-1 prose-code:rounded
+                                prose-pre:bg-zinc-800 prose-pre:border prose-pre:border-zinc-700">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {itineraryResult.itinerary.markdown}
+                                </ReactMarkdown>
+                              </div>
+                              <CopyButton text={itineraryResult.itinerary.markdown} />
+                            </div>
                           </div>
                         </div>
                       ) : (

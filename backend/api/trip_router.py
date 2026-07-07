@@ -63,6 +63,14 @@ async def plan_trip_stream(request: TripRequest):
         # Agent providers: frontend controls which agents use which provider.
         # When None (not sent), all agents use the main provider (default: groq).
         agent_providers = request.agent_providers if request.agent_providers is not None else {}
+        _AGENT_PROVIDER_DEFAULTS = {
+            "supervisor": "groq",
+            "critic": "groq",
+            "routing": "groq",
+            "validator": "groq",
+            "itinerary": "groq",
+        }
+        agent_providers = {**_AGENT_PROVIDER_DEFAULTS, **agent_providers}
 
         initial_state = {
             "user_request": request.user_request,
@@ -136,7 +144,7 @@ async def plan_trip_stream(request: TripRequest):
                 nonlocal graph_done
                 deadline = asyncio.get_event_loop().time() + 300
                 try:
-                    ait = trip_graph.astream_events(initial_state, {"recursion_limit": 100})
+                    ait = trip_graph.astream_events(initial_state, {"recursion_limit": 100}, version="v1")
                     while True:
                         remaining = deadline - asyncio.get_event_loop().time()
                         if remaining <= 0:
@@ -177,7 +185,7 @@ async def plan_trip_stream(request: TripRequest):
                             "LangGraph", "__start__",
                             "route_after_supervisor",  # conditional edge fn
                             "route_after_critic",      # conditional edge fn
-                            "clarify_node",             # terminal, shown via done event
+                            # clarify_node NOT skipped — its output (itinerary) must be captured
                         }
 
                         if kind == "on_chain_start" and name not in _SKIP_NAMES:
@@ -263,6 +271,9 @@ async def plan_trip_stream(request: TripRequest):
                 "destination": final_state.get("destination", ""),
                 "origin": final_state.get("origin", ""),
                 "user_request": final_state.get("user_request", ""),
+                "budget": final_state.get("budget", 0),
+                "currency": final_state.get("currency", ""),
+                "duration_days": final_state.get("duration_days", 0),
                 "execution_trace": final_state.get("execution_trace", []),
                 "warnings": final_state.get("warnings", []),
                 "confidence_score": final_state.get("confidence_score", 0.0),
@@ -297,6 +308,14 @@ async def plan_trip(request: TripRequest) -> TripResponse:
     travelers = request.adults + request.kids + request.infants
 
     agent_providers = request.agent_providers if request.agent_providers is not None else {}
+    _AGENT_PROVIDER_DEFAULTS = {
+        "supervisor": "groq",
+        "critic": "groq",
+        "routing": "groq",
+        "validator": "groq",
+        "itinerary": "groq",
+    }
+    agent_providers = {**_AGENT_PROVIDER_DEFAULTS, **agent_providers}
 
     initial_state = {
         "user_request": request.user_request,
@@ -367,6 +386,7 @@ AGENT_OUTPUT_KEYS = {
     "validator_agent":  ["activities"],  # filtered list (pass-through)
     "itinerary_agent":  ["itinerary"],  # returns {"markdown": "..."}
     "critic_agent":     ["replan_instructions", "needs_replanning", "replan_count"],
+    "clarify_node":     ["itinerary"],
 }
 
 def _sanitize_output(agent: str, output: dict) -> dict:

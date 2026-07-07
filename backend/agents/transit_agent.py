@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Dict
 from tools.weather_tool import weather_tool
 from tools.transport_tool import transport_tool
+from services.transport_cost_service import format_transport_for_prompt
 
 def _recommend_transport(distance_km: float | None, origin: str, destination: str) -> Dict[str, Any]:
     if distance_km is None:
@@ -32,6 +33,11 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     Then recommends best transport mode (flight/train/bus) based on distance.
     """
     if state.get("weather") and state.get("transport"):
+        destination = state.get("destination", "Unknown")
+        transport = state.get("transport", {})
+        if "intra_city" not in transport:
+            transport["intra_city"] = format_transport_for_prompt(destination)
+            return {"transport": transport, "execution_trace": ["transit_agent:from_cache"]}
         return {"execution_trace": ["transit_agent:from_cache"]}
 
     try:
@@ -66,6 +72,10 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         destination = state.get("destination", "Unknown")
         recommendation = _recommend_transport(distance_km, origin, destination)
         transport["recommended"] = recommendation
+
+        # Add intra-city transport cost data for the itinerary prompt
+        destination_name = state.get("destination", "Unknown")
+        transport["intra_city"] = format_transport_for_prompt(destination_name)
 
         return {
             "weather": weather,

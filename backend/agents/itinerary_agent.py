@@ -90,17 +90,28 @@ Preferences: {preferences}
 RULES:
 - Plan EVERY day with morning, afternoon, and evening activities
 - Day 1 = arrival + evening. Last day = morning + departure.
-- Use REAL venue names from the Activities list
-- Avoid outdoor activities on bad weather days (see Weather)
+- Use REAL venue names from the Activities list — do NOT invent venues
+- Avoid outdoor activities on bad weather days (rain, storms)
+- If temperature exceeds 35°C, schedule indoor attractions (museums, malls, indoor markets) between 11 AM and 4 PM. Place outdoor activities (parks, walking tours, beach) in early morning (before 10 AM) or evening (after 5 PM).
 - Mix themes across days (culture, adventure, food, landmarks, relaxation)
-- NEVER repeat an attraction, restaurant, or activity across different days. Every venue must appear exactly once.
-- Group activities on the same day by geographic proximity. Activities listed under the same area (e.g., "Downtown Dubai", "Deira") should be visited on the same day. NEVER combine venues from different areas (e.g., Downtown Dubai + Deira) on the same day — they are too far apart.
-- For each consecutive activity pair, estimate the transit time (driving) and include it in the schedule (e.g., "9:00 AM – 9:30 AM: Drive to venue").
+- NEVER repeat an attraction, restaurant, or activity across different days. Every venue must appear exactly once. Check ALL days for duplicates.
+- Group activities on the same day by geographic proximity. Activities listed under the same area (e.g., "Downtown Dubai", "Deira") MUST be visited on the same day. NEVER combine venues from different areas (e.g., Downtown Dubai + Deira) on the same day — they are too far apart.
+- Restaurants should be in the SAME area as the day's activities. Choose the closest restaurant to the current activity. Prefer restaurants within walking distance (under 1 km). If nearby, recommend walking instead of taxi.
 {replan_rules}
+
+=== TRANSPORT COSTS BETWEEN VENUES ===
+{intra_city_transport}
+
+For EVERY transition between consecutive venues/activities, you MUST include:
+1. The transport mode (walk / metro / bus / taxi) — choose the most practical option
+2. The estimated travel time in minutes
+3. The estimated cost in {currency}
+
+Format each transition like this: `🚕 18 min · ~{currency} 28` or `🚶 12 min · free`
 
 IMPORTANT — You MUST include the following in the output for EACH day:
 
-1. **Budget per day**: Show a clear budget allocation for each day (accommodation, food, activities, transport, misc). Ensure the SUM of all daily budgets stays within the Total Budget above. If the user explicitly mentioned a budget amount for a specific place or activity, use that amount primarily.
+1. **Budget per day**: Show a clear budget allocation for each day (accommodation, food, activities, transport, misc). Ensure the SUM of all daily budget totals matches the Final Cost Summary and stays within Total Budget. Make sure that the SAME hotel has the SAME price per night every day. If the itinerary says "Hyatt Regency" on Day 1 at {currency} 500, then Days 2, 3, etc. must also show Hyatt Regency at {currency} 500/night — never a different price for the same hotel.
 
 2. **Google Maps link for each venue**: For each activity/venue, include a Google Maps link using the name-based search URL. Format: `[Venue Name](https://www.google.com/maps/search/?api=1&query=Venue+Name+City)`
 
@@ -108,41 +119,46 @@ IMPORTANT — You MUST include the following in the output for EACH day:
 
 4. **Restaurant data**: For every restaurant or food venue, include: signature dish(es), average price per person, cuisine type, and neighborhood/area.
 
-5. **Nearby restaurants**: Restaurants should be in the same area/neighborhood as the day's activities. If visiting Dubai Aquarium in Dubai Mall, recommend restaurants in Dubai Mall or Downtown Dubai — not in Deira or Jumeirah.
+5. **Nearby restaurants**: Choose restaurants based on distance from the current venue + rating + price + cuisine preference. Score restaurants by: (1) geographic proximity — closest is best, (2) rating — higher is better, (3) price — within budget, (4) cuisine — matching preferences. The best restaurant is the one that minimizes travel while maximizing quality.
 
 6. **Flight / airline name**: Mention the airline and flight you're recommending for travel to/from the destination. If you know common carriers for this route, use a real airline name.
 
-7. **Accommodation cost**: Include the price per night in {currency} for the recommended hotel.
+7. **Accommodation cost**: Include the price per night in {currency} for the recommended hotel. The SAME hotel must have the EXACT SAME price per night on every day it appears. Accommodation total in Final Cost Summary must equal `nights × hotel_price_per_night`.
 
-8. **Timings**: For each activity, include the recommended time of visit. For example: `9:00 AM - Leave hotel | 9:40 AM - Reach venue | 11:00 AM - Finish | 11:20 AM - Taxi to next | 12:00 PM - Lunch`. This makes the itinerary feel like a real travel plan, not a list.
+8. **Timings with transport**: For each activity, include the time you arrive AND the transport used. For example: `9:00 AM — 🚕 18 min · ~{currency} 28 → [Dubai Frame](...) — ~{currency} 50 · ⏱ 1.5h`. This shows how you got there and what it cost.
 
 9. **Booking info**: For each venue, mention if booking is required, expected visit duration, and best visiting time.
+
+10. **Opening hours**: Before scheduling any activity, check if the venue has opening hours listed. If opening hours include "closed on Mondays" (or any day), verify the itinerary date is not on that closed day. If a venue is closed on the scheduled day, move it to a different day. Include opening hours in the activity line when available (e.g., `⏰ 9 AM – 6 PM · Closed Tue`).
 
 OUTPUT FORMAT:
 Start with "# {num_days}-Day Trip to {destination}"
 Then for each day: "## Day N: Theme" followed by this structure:
 
-**9:00 AM** — [Venue/activity name](https://www.google.com/maps/search/?api=1&query=Venue+Name+City) — ~{currency} XX/pp · *Famous dish: ...* (if restaurant) · ⏱ 1.5h · Booking recommended
-**11:30 AM** — [Next venue](https://www.google.com/maps/search/?api=1&query=Name+City) — ~{currency} XX/pp · ⏱ 1h
-**1:00 PM** — Lunch at [Restaurant name](https://www.google.com/maps/search/?api=1&query=Name+City) — ~{currency} XX/pp · *Signature: ...* · Cuisine: ... · Area: ...
-**3:00 PM** — [Venue/activity name](https://www.google.com/maps/search/?api=1&query=Name+City) — ~{currency} XX/pp · ⏱ 2h · Closed on Mondays
-**7:00 PM** — Dinner at [Restaurant name](https://www.google.com/maps/search/?api=1&query=Name+City) — ~{currency} XX/pp · *Signature: ...* · Cuisine: ... · Area: ...
+**9:00 AM** — 🚕 18 min · ~{currency} 28 → [Venue/activity name](https://www.google.com/maps/search/?api=1&query=Venue+Name+City) — ~{currency} XX/pp · *Famous dish: ...* · ⏱ 1.5h · ⏰ 9 AM – 6 PM · Booking recommended
+**11:30 AM** — 🚶 5 min · free → [Next venue](https://www.google.com/maps/search/?api=1&query=Name+City) — ~{currency} XX/pp · ⏱ 1h · ⏰ 10 AM – 8 PM
+**1:00 PM** — 🚕 12 min · ~{currency} 20 → Lunch at [Restaurant name](https://www.google.com/maps/search/?api=1&query=Name+City) — ~{currency} XX/pp · *Signature: ...* · Cuisine: ... · Area: ...
+**3:00 PM** — 🚕 8 min · ~{currency} 15 → [Venue/activity name](https://www.google.com/maps/search/?api=1&query=Name+City) — ~{currency} XX/pp · ⏱ 2h · ⏰ 9 AM – 5 PM · Closed Mon
+**7:00 PM** — 🚶 3 min · free → Dinner at [Restaurant name](https://www.google.com/maps/search/?api=1&query=Name+City) — ~{currency} XX/pp · *Signature: ...* · Cuisine: ... · Area: ...
 **Day total**: ~{currency} XX (food {currency} XX + activities {currency} XX + transport {currency} XX)
 *Tip: ...*
 
 After each day's section (including its tip), add a separator line `---` with a blank line before and after it to visually separate the days. For the last day, do NOT add a separator after it.
 
-Write the full raw markdown. Do NOT wrap in code blocks. Include ALL days.
+Write the full raw markdown (1400+ words). Do NOT wrap in code blocks. Include ALL days.
 
 After the last day, add a `---` separator, then a **Final Cost Summary** section:
 ```
 **Accommodation**: {num_days} nights × {currency} XX/night = {currency} YY
 **Food (total)**: ~{currency} ZZ
 **Activities (total)**: ~{currency} WW
-**Transport (total)**: ~{currency} VV
+**Transport (total)**: ~{currency} VV (include ALL taxi/metro/bus costs between venues)
 **Grand Total**: ~{currency} TT
 ```
-Accommodation is `nights × price_per_night`. Food/Activities/Transport should be summed from your day totals. Grand Total = accommodation + food + activities + transport."""
+CRITICAL — Grand Total MUST equal Accommodation + Food + Activities + Transport.
+If the sum does not match, fix the numbers until it does.
+Also verify: Accommodation total MUST equal `nights × same_hotel_price_per_night`.
+If using the same hotel every day, the per-night price must be identical across all days."""
 
 
 
@@ -182,13 +198,19 @@ def _format_weather(weather: dict) -> str:
     return "\n".join(lines)
 
 
-def _format_transport(transport: dict) -> str:
+def _format_transport(transport: dict, destination: str = "") -> str:
     if not transport:
         return "No transport data."
     dist = transport.get("distance_km", "?")
     origin = transport.get("origin", "?")
-    destination = transport.get("destination", "?")
-    return f"- Route: {origin} → {destination}\n- Distance: {dist} km\n- Typical flight time: approx. {max(1, round(dist / 800))}h by air"
+    dest = transport.get("destination", "?")
+    lines = [f"- Route: {origin} → {dest}", f"- Distance: {dist} km"]
+    if isinstance(dist, (int, float)):
+        lines.append(f"- Typical flight time: approx. {max(1, round(dist / 800))}h by air")
+    intra = transport.get("intra_city", "")
+    if intra:
+        lines.append(f"\n--- Intra-City Transport ---\n{intra}")
+    return "\n".join(lines)
 
 
 def _cluster_activities(activities: List[Dict[str, Any]]) -> List[Tuple[str, List[Dict[str, Any]]]]:
@@ -394,6 +416,10 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     if visited:
         replan_rules = f"\n- DO NOT repeat any of these previously used venues: {', '.join(visited)}"
 
+    # Build intra-city transport guide from transport_cost_service
+    from services.transport_cost_service import format_transport_for_prompt
+    intra_city_transport = format_transport_for_prompt(destination)
+
     # Build a single formatted input string from all agent outputs
     inputs = {
         "destination": destination,
@@ -410,10 +436,11 @@ async def itinerary_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         "infants": state.get("infants", 0),
         "hotels": _format_hotels(state.get("hotels", []), currency),
         "weather": _format_weather(state.get("weather", {})),
-        "transport": _format_transport(state.get("transport", {})),
+        "transport": _format_transport(state.get("transport", {}), destination),
         "activities": _format_activities(state.get("activities", []), destination, currency),
         "replan_section": replan_section,
         "replan_rules": replan_rules,
+        "intra_city_transport": intra_city_transport,
     }
 
     prompt = ITINERARY_PROMPT_TEMPLATE.format(**inputs)
