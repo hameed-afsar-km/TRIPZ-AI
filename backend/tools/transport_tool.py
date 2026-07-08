@@ -1,11 +1,12 @@
 """
-Transport Tool — live distance calculation using OpenStreetMap geocoding.
-Returns real distance in km. No fabricated prices.
+Transport Tool — live distance calculation using OpenStreetMap geocoding
+ + real flight data from AviationStack API.
 """
 
 import math
 from typing import Any, Dict
 from services.geo_service import geocode_city
+from services.aviationstack_service import search_flights
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -44,6 +45,19 @@ async def transport_tool(state: Dict[str, Any]) -> Dict[str, Any]:
         dest_geo["lat"], dest_geo["lon"],
     )
 
+    # Fetch real flight data from AviationStack
+    flights = await search_flights(origin, destination)
+    flight_data = []
+    for f in flights[:5]:
+        flight_data.append({
+            "airline": f.get("airline", "Unknown"),
+            "flight_number": f.get("flight_number", ""),
+            "departure": f.get("departure_scheduled", ""),
+            "arrival": f.get("arrival_scheduled", ""),
+            "duration_minutes": f.get("duration_minutes"),
+            "status": f.get("status", "unknown"),
+        })
+
     transport_result = {
         "origin": origin,
         "destination": destination,
@@ -52,7 +66,9 @@ async def transport_tool(state: Dict[str, Any]) -> Dict[str, Any]:
             "origin": {"lat": origin_geo["lat"], "lon": origin_geo["lon"]},
             "destination": {"lat": dest_geo["lat"], "lon": dest_geo["lon"]},
         },
-        "note": "Distance calculated from coordinates. No real-time pricing available from free APIs.",
+        "flights": flight_data,
+        "note": "Distance calculated from coordinates. Flight data from AviationStack." if flight_data
+                else "Distance calculated from coordinates. No real-time flight data available.",
     }
 
     return {

@@ -3,10 +3,33 @@ from typing import Any, Dict
 from tools.weather_tool import weather_tool
 from tools.transport_tool import transport_tool
 from services.transport_cost_service import format_transport_for_prompt
+from services.aviationstack_service import search_flights, estimate_flight_cost
 
-def _recommend_transport(distance_km: float | None, origin: str, destination: str) -> Dict[str, Any]:
+
+def _recommend_transport(
+    distance_km: float | None,
+    origin: str,
+    destination: str,
+    flights: list | None = None,
+) -> Dict[str, Any]:
     if distance_km is None:
         return {"recommended_mode": "unknown", "note": "Distance unknown, cannot recommend transport."}
+
+    # If real flight data exists, use it for the recommendation
+    if flights:
+        airlines = set(f.get("airline", "") for f in flights if f.get("airline"))
+        durations = [f.get("duration_minutes") for f in flights if f.get("duration_minutes")]
+        avg_duration = round(sum(durations) / len(durations) / 60, 1) if durations else round(distance_km / 850, 1)
+        airlines_str = ", ".join(sorted(airlines)) if airlines else "various airlines"
+        return {
+            "recommended_mode": "flight",
+            "estimated_duration_hours": avg_duration,
+            "airlines_available": airlines_str,
+            "num_flights_found": len(flights),
+            "note": f"Real flight data: {len(flights)} flights available via {airlines_str}. ~{avg_duration}h.",
+        }
+
+    # Fall back to distance-based heuristic when no real flight data
     if distance_km > 2000:
         return {
             "recommended_mode": "flight",
@@ -70,7 +93,8 @@ async def transit_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         distance_km = transport.get("distance_km") if isinstance(transport, dict) else None
         origin = state.get("origin", "Unknown")
         destination = state.get("destination", "Unknown")
-        recommendation = _recommend_transport(distance_km, origin, destination)
+        flights = transport.get("flights") if isinstance(transport, dict) else None
+        recommendation = _recommend_transport(distance_km, origin, destination, flights)
         transport["recommended"] = recommendation
 
         # Add intra-city transport cost data for the itinerary prompt

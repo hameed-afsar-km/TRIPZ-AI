@@ -6,6 +6,7 @@ import httpx
 from services.serpapi_service import search_hotels, search_web, extract_price_from_snippets
 from services.duckduckgo_service import search_hotel_price as ddg_search_price
 from services.jina_scraper import scrape_hotel_price as jina_search_price
+from services.tavily_service import search_hotel_prices as tavily_search_price
 
 logger = logging.getLogger("tripz.agents")
 
@@ -92,6 +93,12 @@ async def get_hotel_price(
         return avg
 
     # No SerpAPI results at all → try fallback chain
+    # Tavily — most reliable AI-optimized search
+    tavily_price = await tavily_search_price(hotel_name, destination, currency)
+    if tavily_price is not None:
+        logger.info("Hotels price found via Tavily: %s = %.2f %s", hotel_name, tavily_price, currency)
+        return tavily_price
+
     xotelo = await _xotelo_fallback(hotel_name, destination, currency, chk_in, chk_out)
     if xotelo is not None:
         return xotelo

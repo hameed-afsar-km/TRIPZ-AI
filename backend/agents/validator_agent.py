@@ -1,8 +1,10 @@
+import asyncio
 import json
 from typing import Any, Dict, List
 
 from services.llm_service import call_llm_json, resolve_provider
 from services.attraction_cache import get_known_attractions, is_known_attraction
+from services.tavily_service import search_venue_info
 
 VALIDATOR_SYSTEM = """You are a professional travel expert. Your job is to filter a list of locations
 and determine which ones are legitimate tourist attractions that real travellers would visit.
@@ -78,6 +80,25 @@ async def validator_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             approved.append(a)
         else:
             unknown_venues.append(a)
+
+    # Tavily pre-filter: web-search unknown venues before LLM validation
+    if unknown_venues:
+        async def _tavily_check(a: Dict[str, Any]) -> bool:
+            info = await search_venue_info(a.get("name", ""), destination)
+            if info and info.get("is_tourist_attraction"):
+                a["_validated"] = True
+                a["_validation_source"] = "tavily_web"
+                return True
+            return False
+
+        checked = await asyncio.gather(*[_tavily_check(a) for a in unknown_venues], return_exceptions=True)
+        still_unknown = []
+        for a, ok in zip(unknown_venues, checked):
+            if isinstance(ok, Exception) or not ok:
+                still_unknown.append(a)
+            else:
+                approved.append(a)
+        unknown_venues = still_unknown
 
     if not unknown_venues:
         return {

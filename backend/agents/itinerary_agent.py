@@ -205,8 +205,20 @@ def _format_transport(transport: dict, destination: str = "") -> str:
     origin = transport.get("origin", "?")
     dest = transport.get("destination", "?")
     lines = [f"- Route: {origin} → {dest}", f"- Distance: {dist} km"]
-    if isinstance(dist, (int, float)):
+
+    # Real flight data from AviationStack (if available)
+    flights = transport.get("flights", [])
+    if flights:
+        lines.append("\n--- Real Flight Options ---")
+        for f in flights[:5]:
+            airline = f.get("airline", "?")
+            flight_num = f.get("flight_number", "")
+            duration = f.get("duration_minutes")
+            dur_str = f"({duration} min)" if duration else ""
+            lines.append(f"  - {airline} {flight_num} {dur_str}")
+    elif isinstance(dist, (int, float)):
         lines.append(f"- Typical flight time: approx. {max(1, round(dist / 800))}h by air")
+
     intra = transport.get("intra_city", "")
     if intra:
         lines.append(f"\n--- Intra-City Transport ---\n{intra}")
