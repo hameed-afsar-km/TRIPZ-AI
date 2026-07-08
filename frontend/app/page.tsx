@@ -604,7 +604,7 @@ export default function Home() {
     mouseY.set(y);
   };
 
-  const runAgentSimulation = async (userInput: string, provider: string = "groq", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
+  const runAgentSimulation = async (userInput: string, provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -794,7 +794,7 @@ export default function Home() {
             timestamp: new Date().toLocaleTimeString(),
             isError: true,
           }]);
-          const providerName = provider === "groq" ? "Groq (llama-3.3-70b)" : provider;
+          const providerName = provider === "ollama" ? "Ollama (qwen2.5:1.5b)" : provider === "groq" ? "Groq (llama-3.3-70b)" : provider;
           setValidationError(`The request took too long with ${providerName}. Check that your provider is running and the API key is correct, or try a different provider in Settings.`);
           setIsProcessing(false);
           setSimulationStage("done");
@@ -821,7 +821,7 @@ export default function Home() {
     }
   };
 
-  const handleSend = (msg: string, files?: File[], provider: string = "groq", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
+  const handleSend = (msg: string, files?: File[], provider: string = "ollama", apiKey: string = "", agentProviders: Record<string, string> = {}, adults: number = 1, kids: number = 0, infants: number = 0, tripStyle: string = "") => {
     if (!msg || msg.trim() === "") return;
     if (!isTripRelated(msg)) {
       setValidationError("Please type a request related to trip planning (e.g., '3 days in Tokyo', 'Paris budget route', or 'explore Rome').");

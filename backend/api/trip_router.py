@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1", tags=["trip"])
 class TripRequest(BaseModel):
     user_request: str = Field(..., min_length=5)
     stream: bool = Field(default=True)
-    provider: str = Field(default="groq")
+    provider: str = Field(default="ollama")
     api_key: Optional[str] = Field(default=None)
     session_id: Optional[str] = Field(default=None)
     agent_providers: Optional[dict] = Field(default=None)
@@ -61,14 +61,14 @@ async def plan_trip_stream(request: TripRequest):
         travelers = request.adults + request.kids + request.infants
 
         # Agent providers: frontend controls which agents use which provider.
-        # When None (not sent), all agents use the main provider (default: groq).
+        # When None (not sent), all agents use the main provider (default: ollama).
         agent_providers = request.agent_providers if request.agent_providers is not None else {}
         _AGENT_PROVIDER_DEFAULTS = {
-            "supervisor": "groq",
-            "critic": "groq",
-            "routing": "groq",
-            "validator": "groq",
-            "itinerary": "groq",
+            "supervisor": "ollama",
+            "critic": "ollama",
+            "routing": "ollama",
+            "validator": "ollama",
+            "itinerary": "ollama",
         }
         agent_providers = {**_AGENT_PROVIDER_DEFAULTS, **agent_providers}
 
@@ -309,11 +309,11 @@ async def plan_trip(request: TripRequest) -> TripResponse:
 
     agent_providers = request.agent_providers if request.agent_providers is not None else {}
     _AGENT_PROVIDER_DEFAULTS = {
-        "supervisor": "groq",
-        "critic": "groq",
-        "routing": "groq",
-        "validator": "groq",
-        "itinerary": "groq",
+        "supervisor": "ollama",
+        "critic": "ollama",
+        "routing": "ollama",
+        "validator": "ollama",
+        "itinerary": "ollama",
     }
     agent_providers = {**_AGENT_PROVIDER_DEFAULTS, **agent_providers}
 

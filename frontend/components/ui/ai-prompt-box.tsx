@@ -470,7 +470,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   
   // Settings State
   const [showSettings, setShowSettings] = React.useState(false);
-  const [provider, setProvider] = React.useState("groq");
+  const [provider, setProvider] = React.useState("ollama");
   const [apiKey, setApiKey] = React.useState("");
   const [freeTier, setFreeTier] = React.useState(true);
 
@@ -941,11 +941,11 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
                 onChange={(e) => setProvider(e.target.value)}
                 className="w-full bg-[#09090b]/80 border border-white/10 rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50"
               >
+                <option value="ollama">Ollama (Local - qwen2.5:1.5b)</option>
                 <option value="groq">Groq (llama-3.3-70b) — Fastest</option>
                 <option value="gemini">Google Gemini (gemini-2.5-flash)</option>
                 <option value="openai">OpenAI (gpt-4o-mini)</option>
                 <option value="anthropic">Anthropic (claude-3-haiku)</option>
-                <option value="ollama">Ollama (Local - qwen2.5:1.5b)</option>
                 <option value="openrouter">OpenRouter (llama-3.1-8b)</option>
               </select>
             </div>

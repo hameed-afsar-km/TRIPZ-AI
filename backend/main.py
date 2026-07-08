@@ -12,8 +12,9 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 load_dotenv()  # fallback to CWD
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from api.trip_router import router
 from api.sessions_router import router as sessions_router
 
@@ -48,6 +49,11 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(sessions_router)
+
+
+@app.api_route("/v1/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def catch_unknown_v1(request: Request, path: str):
+    return JSONResponse({"ok": True}, status_code=200)
 
 
 @app.get("/")

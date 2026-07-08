@@ -55,7 +55,7 @@ def _is_valid_key(k: Optional[str]) -> bool:
 def resolve_provider(state: dict, agent_role: str) -> str:
     """Return the provider for `agent_role`, checking agent_providers first."""
     ap = state.get("agent_providers", {})
-    return ap.get(agent_role, state.get("provider", "groq"))
+    return ap.get(agent_role, state.get("provider", "ollama"))
 
 def _cache_key(prompt: str, system: Optional[str], provider: str, expect_json: bool, temperature: float) -> str:
     raw = f"{provider}|{system}|{prompt}|{expect_json}|{temperature}"
@@ -143,7 +143,7 @@ async def call_llm(
     system: Optional[str] = None,
     expect_json: bool = False,
     temperature: float = 0.3,
-    provider: str = "groq",
+    provider: str = "ollama",
     api_key: Optional[str] = None,
     use_cache: bool = True,
     timeout: int = 60,
@@ -342,7 +342,7 @@ async def call_llm_json(
     prompt: str,
     system: Optional[str] = None,
     retries: int = 0,
-    provider: str = "groq",
+    provider: str = "ollama",
     api_key: Optional[str] = None,
     timeout: int = 60,
 ) -> Dict[str, Any]:
